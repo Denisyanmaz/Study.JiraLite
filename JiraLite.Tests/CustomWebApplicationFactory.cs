@@ -4,35 +4,60 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Testcontainers.PostgreSql;
+using Xunit;
 
 namespace JiraLite.Tests.Integration
 {
-    public class CustomWebApplicationFactory : WebApplicationFactory<Program>
+    public class CustomWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
-        // unique DB name per factory instance (prevents cross-test-class leaking)
-        public string DbName { get; } = $"JiraLite_TestDb_{Guid.NewGuid():N}";
+        private readonly string _dbName = $"jiralite_test_{Guid.NewGuid():N}";
+
+        private PostgreSqlContainer _pg = default!;
+
+        public async Task InitializeAsync()
+        {
+            _pg = new PostgreSqlBuilder()
+                .WithImage("postgres:16-alpine")
+                .WithDatabase(_dbName)
+                .WithUsername("postgres")
+                .WithPassword("postgres")
+                .Build();
+
+            await _pg.StartAsync();
+        }
+
+        public async Task DisposeAsync()
+        {
+            if (_pg != null)
+                await _pg.DisposeAsync();
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
-            builder.UseEnvironment("Testing");
+            // IMPORTANT: do NOT use "Testing" here, because Program.cs uses that to register InMemory
+            builder.UseEnvironment("IntegrationTesting");
 
             builder.ConfigureServices(services =>
             {
-                // Remove existing registrations (from Program.cs)
+                // Remove any existing DbContext registrations from Program.cs
                 services.RemoveAll<DbContextOptions<JiraLiteDbContext>>();
                 services.RemoveAll<JiraLiteDbContext>();
 
-                // Register a single InMemory provider for this factory
+                // Register PostgreSQL for tests
                 services.AddDbContext<JiraLiteDbContext>(options =>
                 {
-                    options.UseInMemoryDatabase(DbName);
+                    options.UseNpgsql(_pg.GetConnectionString());
                 });
 
-                // Ensure DB exists
+                // Build provider + ensure schema exists
                 var sp = services.BuildServiceProvider();
                 using var scope = sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<JiraLiteDbContext>();
-                db.Database.EnsureCreated();
+
+                // If you have migrations, prefer:
+                db.Database.Migrate();
+                // db.Database.EnsureCreated();
             });
         }
     }

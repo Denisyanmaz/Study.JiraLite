@@ -37,16 +37,10 @@ builder.Services.AddOpenApiDocument(config =>
 });
 
 // 🔹 Database
-if (builder.Environment.IsEnvironment("Testing"))
-{
-    builder.Services.AddDbContext<JiraLiteDbContext>(options =>
-        options.UseInMemoryDatabase("JiraLite_TestDb"));
-}
-else
-{
-    builder.Services.AddDbContext<JiraLiteDbContext>(options =>
-        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-}
+// 🔹 Database (always Postgres; tests override the connection string)
+builder.Services.AddDbContext<JiraLiteDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 
 // 🔹 Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();

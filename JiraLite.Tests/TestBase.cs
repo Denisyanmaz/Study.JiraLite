@@ -1,6 +1,7 @@
-﻿using System.Net.Http;
-using JiraLite.Infrastructure.Persistence;
+﻿using JiraLite.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http;
 using Xunit;
 
 namespace JiraLite.Tests
@@ -9,23 +10,22 @@ namespace JiraLite.Tests
     {
         protected readonly HttpClient Client;
         protected readonly JiraLiteDbContext Db;
+
         private readonly IServiceScope _scope;
 
         protected TestBase(JiraLite.Tests.Integration.CustomWebApplicationFactory factory)
         {
             Client = factory.CreateClient();
-
             _scope = factory.Services.CreateScope();
             Db = _scope.ServiceProvider.GetRequiredService<JiraLiteDbContext>();
         }
 
         public async Task InitializeAsync()
         {
-            // Reset DB for EVERY test so tests are deterministic
-            await Db.Database.EnsureDeletedAsync();
-            await Db.Database.EnsureCreatedAsync();
+            // Clean DB for each test (fast + deterministic)
+            await ResetDbAsync();
 
-            // Avoid auth header leaking between tests
+            // Prevent auth header leaking between tests
             Client.DefaultRequestHeaders.Authorization = null;
         }
 
@@ -33,6 +33,15 @@ namespace JiraLite.Tests
         {
             _scope.Dispose();
             return Task.CompletedTask;
+        }
+
+        private async Task ResetDbAsync()
+        {
+            // Adjust table names if your EF mappings differ
+            await Db.Database.ExecuteSqlRawAsync(@"
+                TRUNCATE TABLE ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users""
+                RESTART IDENTITY CASCADE;
+            ");
         }
     }
 }
