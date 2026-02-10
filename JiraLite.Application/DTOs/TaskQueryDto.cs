@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace JiraLite.Application.DTOs.Tasks;
 
-public sealed class TaskQueryDto : PagedQueryDto
+public sealed class TaskQueryDto : TasksPagedQueryDto
 {
     public JiraTaskStatus? Status { get; set; }
 

@@ -44,7 +44,7 @@ namespace JiraLite.Api.Controllers
         }
 
         [HttpGet("paged")]
-        public async Task<IActionResult> MyProjectsPaged([FromQuery] PagedQueryDto q)
+        public async Task<IActionResult> MyProjectsPaged([FromQuery] TasksPagedQueryDto q)
         {
             var result = await _projectService.GetMyProjectsPagedAsync(GetCurrentUserId(), q.Page, q.PageSize);
             return Ok(result);
