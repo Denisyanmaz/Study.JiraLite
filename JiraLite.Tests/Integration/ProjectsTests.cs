@@ -110,8 +110,8 @@ namespace JiraLite.Tests.Integration
 
             SetAuth(user);
 
-            await Client.PostAsJsonAsync("/api/Projects", new CreateProjectDto { Name = "P1" });
-            await Client.PostAsJsonAsync("/api/Projects", new CreateProjectDto { Name = "P2" });
+            await Client.PostAsJsonAsync("/api/Projects", new CreateProjectDto { Name = "P100" });
+            await Client.PostAsJsonAsync("/api/Projects", new CreateProjectDto { Name = "P101" });
 
             var response = await Client.GetAsync("/api/Projects");
 

@@ -21,34 +21,40 @@ namespace JiraLite.Api.Controllers
         [HttpPost("{projectId}/members")]
         public async Task<IActionResult> AddMember(Guid projectId, [FromBody] ProjectMemberDto dto)
         {
-            var member = await _projectService.AddMemberAsync(
-                projectId,
-                dto,
-                GetUserId()
-            );
+            var currentUserId = GetCurrentUserId();
 
-            return Ok(member);
+            // Let service enforce owner/duplicate/etc; filter will map exceptions
+            var memberDto = await _projectService.AddMemberAsync(projectId, dto, currentUserId);
+            return Ok(memberDto);
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateProjectDto dto)
+        public async Task<IActionResult> Create(CreateProjectDto dto)
         {
-            var project = await _projectService.CreateAsync(GetUserId(), dto);
-            return Ok(project);
+            var result = await _projectService.CreateAsync(GetCurrentUserId(), dto);
+            return Ok(result);
         }
 
         [HttpGet]
         public async Task<IActionResult> MyProjects()
         {
-            var projects = await _projectService.GetMyProjectsAsync(GetUserId());
+            var projects = await _projectService.GetMyProjectsAsync(GetCurrentUserId());
             return Ok(projects);
         }
 
-        private Guid GetUserId()
+        private Guid GetCurrentUserId()
         {
-            return Guid.Parse(
-                User.FindFirstValue(ClaimTypes.NameIdentifier)!
-            );
+            var idClaim =
+                User.FindFirstValue("id") ??
+                User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(idClaim))
+                throw new UnauthorizedAccessException("User ID claim missing");
+
+            if (!Guid.TryParse(idClaim, out var userId))
+                throw new UnauthorizedAccessException($"Invalid user ID claim: '{idClaim}'");
+
+            return userId;
         }
     }
 }
