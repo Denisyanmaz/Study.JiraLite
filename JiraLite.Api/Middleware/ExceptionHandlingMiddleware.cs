@@ -29,15 +29,21 @@ namespace JiraLite.Api.Middleware
             {
                 await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
             }
-            catch (InvalidOperationException ex)
+            catch (ConflictException ex) // ✅ ADD THIS
             {
-                // often used for conflict / invalid state
                 await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                // don't leak internals
-                await WriteProblem(context, StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
+                await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
+            }
+            catch (Exception)
+            {
+                await WriteProblem(
+                    context,
+                    StatusCodes.Status500InternalServerError,
+                    "An unexpected error occurred."
+                );
             }
         }
 
@@ -53,8 +59,7 @@ namespace JiraLite.Api.Middleware
                 Detail = detail
             };
 
-            var json = JsonSerializer.Serialize(problem);
-            await context.Response.WriteAsync(json);
+            await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
         }
     }
 }

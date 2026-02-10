@@ -10,24 +10,27 @@ namespace JiraLite.Api.Filters
         {
             switch (context.Exception)
             {
-                case ForbiddenException ex:
-                    context.Result = new ObjectResult(new { message = ex.Message })
+                case ForbiddenException forbiddenEx:
+                    context.Result = new ObjectResult(new { message = forbiddenEx.Message })
                     {
                         StatusCode = StatusCodes.Status403Forbidden
                     };
                     context.ExceptionHandled = true;
                     break;
 
-                case ConflictException ex:
-                    context.Result = new ObjectResult(new { message = ex.Message })
+                case ConflictException conflictEx:
+                    context.Result = new ObjectResult(new { message = conflictEx.Message })
                     {
                         StatusCode = StatusCodes.Status409Conflict
                     };
                     context.ExceptionHandled = true;
                     break;
 
-                case KeyNotFoundException ex:
-                    context.Result = new NotFoundObjectResult(new { message = ex.Message });
+                case KeyNotFoundException notFoundEx:
+                    context.Result = new ObjectResult(new { message = notFoundEx.Message })
+                    {
+                        StatusCode = StatusCodes.Status404NotFound
+                    };
                     context.ExceptionHandled = true;
                     break;
             }
