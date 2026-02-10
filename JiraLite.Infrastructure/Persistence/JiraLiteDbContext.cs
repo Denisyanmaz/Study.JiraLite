@@ -22,6 +22,8 @@ namespace JiraLite.Infrastructure.Persistence
         public DbSet<Project> Projects => Set<Project>();
         public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
         public DbSet<TaskItem> Tasks => Set<TaskItem>();
+        public DbSet<TaskComment> Comments => Set<TaskComment>();
+        public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
 
         public override int SaveChanges()
         {
@@ -34,6 +36,45 @@ namespace JiraLite.Infrastructure.Persistence
 
             // ✅ Soft delete: hide deleted tasks everywhere by default
             modelBuilder.Entity<TaskItem>().HasQueryFilter(t => !t.IsDeleted);
+
+            // ----------------------------
+            // Comments
+            // ----------------------------
+            modelBuilder.Entity<TaskComment>(entity =>
+            {
+                entity.Property(c => c.Body)
+                      .IsRequired()
+                      .HasMaxLength(2000);
+
+                // Relationship: TaskComment -> TaskItem (many-to-one)
+                entity.HasOne(c => c.Task)
+                      .WithMany() // keep simple; we can add TaskItem.Comments later if you want
+                      .HasForeignKey(c => c.TaskId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Helpful indexes
+                entity.HasIndex(c => c.TaskId);
+                entity.HasIndex(c => c.AuthorId);
+                entity.HasIndex(c => c.CreatedAt);
+            });
+
+            // ----------------------------
+            // Activity Log
+            // ----------------------------
+            modelBuilder.Entity<ActivityLog>(entity =>
+            {
+                entity.Property(a => a.ActionType)
+                      .IsRequired()
+                      .HasMaxLength(100);
+
+                entity.Property(a => a.Message)
+                      .IsRequired()
+                      .HasMaxLength(2000);
+
+                entity.HasIndex(a => a.ProjectId);
+                entity.HasIndex(a => a.TaskId);
+                entity.HasIndex(a => a.CreatedAt);
+            });
         }
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

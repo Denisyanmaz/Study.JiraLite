@@ -41,8 +41,8 @@ namespace JiraLite.Tests
         {
             // Adjust table names if your EF mappings differ
             await Db.Database.ExecuteSqlRawAsync(@"
-                TRUNCATE TABLE ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users""
-                RESTART IDENTITY CASCADE;
+            TRUNCATE TABLE ""ActivityLogs"", ""Comments"", ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users""
+            RESTART IDENTITY CASCADE;
             ");
         }
 
