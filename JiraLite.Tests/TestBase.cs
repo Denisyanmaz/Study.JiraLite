@@ -1,7 +1,9 @@
-﻿using JiraLite.Infrastructure.Persistence;
+﻿using JiraLite.Domain.Entities;
+using JiraLite.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using Xunit;
 
 namespace JiraLite.Tests
@@ -42,6 +44,44 @@ namespace JiraLite.Tests
                 TRUNCATE TABLE ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users""
                 RESTART IDENTITY CASCADE;
             ");
+        }
+
+        protected void SetAuth(User user)
+        {
+            Client.DefaultRequestHeaders.Authorization = null;
+
+            var token = TestHelpers.GenerateJwt(user);
+            Client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        protected void ClearAuth()
+        {
+            Client.DefaultRequestHeaders.Authorization = null;
+        }
+        protected async Task<(User owner, User member, Project project)> SeedProjectWithMemberAsync()
+        {
+            var owner = TestHelpers.CreateUser("owner@test.com");
+            var member = TestHelpers.CreateUser("member@test.com");
+
+            var project = new Project
+            {
+                Id = Guid.NewGuid(),
+                Name = "Audit|Paging|Soft-Delete Project",
+                Description = "Test",
+                OwnerId = owner.Id
+            };
+
+            Db.Users.AddRange(owner, member);
+            Db.Projects.Add(project);
+
+            Db.ProjectMembers.AddRange(
+                new ProjectMember { ProjectId = project.Id, UserId = owner.Id, Role = "Owner" },
+                new ProjectMember { ProjectId = project.Id, UserId = member.Id, Role = "Member" }
+            );
+
+            await Db.SaveChangesAsync();
+            return (owner, member, project);
         }
     }
 }

@@ -12,5 +12,10 @@ namespace JiraLite.Domain.Entities
         public Guid AssigneeId { get; set; }
         public Guid ProjectId { get; set; }
         public DateTime? DueDate { get; set; }
+
+        // ✅ Soft delete fields
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+        public Guid? DeletedBy { get; set; }
     }
 }

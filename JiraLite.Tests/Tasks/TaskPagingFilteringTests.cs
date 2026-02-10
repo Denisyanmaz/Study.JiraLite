@@ -207,37 +207,6 @@ public class TaskPagingFilteringTests : TestBase
     // helpers
     // -----------------------
 
-    private void SetAuth(User user)
-    {
-        var token = TestHelpers.GenerateJwt(user);
-        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    }
-
-    private async Task<(User owner, User member, Project project)> SeedProjectWithMemberAsync()
-    {
-        var owner = TestHelpers.CreateUser("owner@test.com");
-        var member = TestHelpers.CreateUser("member@test.com");
-
-        var project = new Project
-        {
-            Id = Guid.NewGuid(),
-            Name = "Paging Project",
-            Description = "Test",
-            OwnerId = owner.Id
-        };
-
-        Db.Users.AddRange(owner, member);
-        Db.Projects.Add(project);
-
-        Db.ProjectMembers.AddRange(
-            new ProjectMember { ProjectId = project.Id, UserId = owner.Id, Role = "Owner" },
-            new ProjectMember { ProjectId = project.Id, UserId = member.Id, Role = "Member" }
-        );
-
-        await Db.SaveChangesAsync();
-        return (owner, member, project);
-    }
-
     private async Task SeedTasksAsync(Guid projectId, Guid assigneeId, int count)
     {
         var statuses = new[] { JiraTaskStatus.Todo, JiraTaskStatus.InProgress, JiraTaskStatus.Done };

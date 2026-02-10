@@ -12,13 +12,6 @@ namespace JiraLite.Tests.Integration
     {
         public ProjectsTests(CustomWebApplicationFactory factory) : base(factory) { }
 
-        private void SetAuth(User user)
-        {
-            var token = TestHelpers.GenerateJwt(user);
-            Client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
-        }
-
         // =========================
         // 1️⃣ Create project without JWT → 401
         // =========================

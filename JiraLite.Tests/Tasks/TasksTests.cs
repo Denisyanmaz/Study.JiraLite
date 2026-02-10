@@ -5,23 +5,14 @@ using FluentAssertions;
 using JiraLite.Application.DTOs;
 using JiraLite.Domain.Entities;
 using JiraLite.Domain.Enums;
+using JiraLite.Tests.Integration;
 using Microsoft.EntityFrameworkCore;
 
-namespace JiraLite.Tests.Integration
+namespace JiraLite.Tests.Tasks
 {
     public class TasksTests : TestBase
     {
         public TasksTests(CustomWebApplicationFactory factory) : base(factory) { }
-
-        private void SetAuth(User user)
-        {
-            // important: don't let a previous test’s header leak into this one
-            Client.DefaultRequestHeaders.Authorization = null;
-
-            var token = TestHelpers.GenerateJwt(user);
-            Client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
-        }
 
         private async Task<(User owner, User memberAssignee, User memberOther, User outsider, Project project)> SeedProjectWithMembersAsync()
         {

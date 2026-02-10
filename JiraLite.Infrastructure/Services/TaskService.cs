@@ -107,9 +107,14 @@ namespace JiraLite.Infrastructure.Services
             if (task.AssigneeId != currentUserId && project.OwnerId != currentUserId)
                 throw new ForbiddenException("Only the assignee or project owner can delete this task.");
 
-            _context.Tasks.Remove(task);
+            // ✅ Soft delete instead of physical delete
+            task.IsDeleted = true;
+            task.DeletedAt = DateTime.UtcNow;
+            task.DeletedBy = currentUserId;
+
             await _context.SaveChangesAsync();
         }
+
 
         public async Task<PagedResult<TaskItem>> GetTasksByProjectPagedAsync(
             Guid projectId,

@@ -1,4 +1,5 @@
 ﻿using JiraLite.Api.Filters;
+using JiraLite.Api.Services;
 using JiraLite.Application.Interfaces;
 using JiraLite.Infrastructure.Persistence;
 using JiraLite.Infrastructure.Services;
@@ -31,7 +32,8 @@ builder.Services.AddControllers()
         };
     });
 
-
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 // 🔹 NSwag / Swagger UI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApiDocument(config =>
