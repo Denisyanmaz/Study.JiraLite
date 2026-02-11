@@ -19,16 +19,16 @@ namespace JiraLite.Api.Controllers
         }
 
         [HttpGet("project/{projectId}")]
-        public async Task<IActionResult> GetByProject(Guid projectId, [FromQuery] ActivityPagedQueryDto paging)
+        public async Task<IActionResult> GetByProject(Guid projectId, [FromQuery] ActivityFilterQueryDto query)
         {
-            var result = await _activity.GetByProjectAsync(projectId, paging, GetCurrentUserId());
+            var result = await _activity.GetByProjectAsync(projectId, query, GetCurrentUserId());
             return Ok(result);
         }
 
         [HttpGet("task/{taskId}")]
-        public async Task<IActionResult> GetByTask(Guid taskId, [FromQuery] ActivityPagedQueryDto paging)
+        public async Task<IActionResult> GetByTask(Guid taskId, [FromQuery] ActivityFilterQueryDto query)
         {
-            var result = await _activity.GetByTaskAsync(taskId, paging, GetCurrentUserId());
+            var result = await _activity.GetByTaskAsync(taskId, query, GetCurrentUserId());
             return Ok(result);
         }
 

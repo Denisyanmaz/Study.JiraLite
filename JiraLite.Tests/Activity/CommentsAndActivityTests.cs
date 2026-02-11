@@ -9,7 +9,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Xunit;
 
-namespace JiraLite.Tests.Comments;
+namespace JiraLite.Tests.Activity;
 
 public class CommentsAndActivityTests : TestBase
 {

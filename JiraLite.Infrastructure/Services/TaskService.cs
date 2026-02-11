@@ -12,10 +12,12 @@ namespace JiraLite.Infrastructure.Services
     public class TaskService : ITaskService
     {
         private readonly JiraLiteDbContext _context;
+        private readonly IActivityService _activity;
 
-        public TaskService(JiraLiteDbContext context)
+        public TaskService(JiraLiteDbContext context, IActivityService activity)
         {
             _context = context;
+            _activity = activity;
         }
 
         // 🔹 Create Task (only project members)
@@ -40,6 +42,15 @@ namespace JiraLite.Infrastructure.Services
 
             _context.Tasks.Add(task);
             await _context.SaveChangesAsync();
+
+            await _activity.LogAsync(
+                projectId: task.ProjectId,
+                taskId: task.Id,
+                actorId: currentUserId,
+                actionType: "TaskCreated",
+                message: $"Task created: '{task.Title}' (Status: {task.Status}, Priority: {FormatPriority(task.Priority)}, Assignee: {task.AssigneeId}, Due: {FormatDue(task.DueDate)})"
+            );
+
             return task;
         }
 
@@ -84,6 +95,14 @@ namespace JiraLite.Infrastructure.Services
             if (task.AssigneeId != currentUserId && project.OwnerId != currentUserId)
                 throw new ForbiddenException("Only the assignee or project owner can update this task.");
 
+            // ✅ snapshot (before)
+            var beforeTitle = task.Title;
+            var beforeStatus = task.Status;
+            var beforePriority = task.Priority;
+            var beforeAssignee = task.AssigneeId;
+            var beforeDue = task.DueDate;
+
+            // apply updates
             task.Title = dto.Title;
             task.Description = dto.Description;
             task.Status = dto.Status;
@@ -92,6 +111,40 @@ namespace JiraLite.Infrastructure.Services
             task.DueDate = dto.DueDate;
 
             await _context.SaveChangesAsync();
+
+            // ✅ build rich diff message
+            static string P(int p) => $"P{p}";
+            static string Due(DateTime? d) => d.HasValue ? d.Value.ToString("yyyy-MM-dd") : "None";
+
+            var changes = new List<string>();
+
+            if (beforeTitle != task.Title)
+                changes.Add($"Title '{beforeTitle}' → '{task.Title}'");
+
+            if (beforeStatus != task.Status)
+                changes.Add($"Status {beforeStatus} → {task.Status}");
+
+            if (beforePriority != task.Priority)
+                changes.Add($"Priority {P(beforePriority)} → {P(task.Priority)}");
+
+            if (beforeAssignee != task.AssigneeId)
+                changes.Add($"Assignee {beforeAssignee} → {task.AssigneeId}");
+
+            if (beforeDue != task.DueDate)
+                changes.Add($"Due {Due(beforeDue)} → {Due(task.DueDate)}");
+
+            var message = changes.Count == 0
+                ? $"Task updated: '{task.Title}'"
+                : $"Task updated: '{task.Title}': {string.Join("; ", changes)}";
+
+            await _activity.LogAsync(
+                projectId: task.ProjectId,
+                taskId: task.Id,
+                actorId: currentUserId,
+                actionType: "TaskUpdated",
+                message: message
+            );
+
             return task;
         }
 
@@ -113,8 +166,15 @@ namespace JiraLite.Infrastructure.Services
             task.DeletedBy = currentUserId;
 
             await _context.SaveChangesAsync();
-        }
 
+            await _activity.LogAsync(
+                projectId: task.ProjectId,
+                taskId: task.Id,
+                actorId: currentUserId,
+                actionType: "TaskDeleted",
+                message: $"Task deleted: '{task.Title}' (moved to recycle bin)"
+            );
+        }
 
         public async Task<PagedResult<TaskItem>> GetTasksByProjectPagedAsync(
             Guid projectId,
@@ -158,6 +218,18 @@ namespace JiraLite.Infrastructure.Services
                 .ToListAsync();
 
             return new PagedResult<TaskItem>(items, query.Page, query.PageSize, total);
+        }
+
+        private static string FormatPriority(int p) => $"P{p}";
+
+        private static string FormatDue(DateTime? due)
+            => due.HasValue ? due.Value.ToString("yyyy-MM-dd") : "None";
+
+        private static string Short(string? text, int max = 80)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+            text = text.Trim();
+            return text.Length <= max ? text : text.Substring(0, max) + "…";
         }
     }
 }

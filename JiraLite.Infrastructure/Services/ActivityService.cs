@@ -34,27 +34,43 @@ namespace JiraLite.Infrastructure.Services
 
         public async Task<PagedResult<ActivityLogDto>> GetByProjectAsync(
             Guid projectId,
-            ActivityPagedQueryDto paging,
+            ActivityFilterQueryDto query,
             Guid currentUserId)
         {
-            // 🔐 Membership check
             var isMember = await _db.ProjectMembers
                 .AnyAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId);
 
             if (!isMember)
                 throw new ForbiddenException("You are not a member of this project.");
 
-            var query = _db.ActivityLogs
-                .Where(a => a.ProjectId == projectId);
+            IQueryable<ActivityLog> logs = _db.ActivityLogs.Where(a => a.ProjectId == projectId);
 
-            var total = await query.CountAsync();
+            // ✅ filters
+            if (!string.IsNullOrWhiteSpace(query.ActionType))
+                logs = logs.Where(a => a.ActionType == query.ActionType);
 
-            // stable ordering (CreatedAt desc, then Id desc)
-            var items = await query
+            if (query.TaskId.HasValue)
+                logs = logs.Where(a => a.TaskId == query.TaskId.Value);
+
+            if (query.ActorId.HasValue)
+                logs = logs.Where(a => a.ActorId == query.ActorId.Value);
+
+            if (!string.IsNullOrWhiteSpace(query.Q))
+            {
+                var q = query.Q.Trim();
+
+                logs = logs.Where(a =>
+                    EF.Functions.ILike(a.Message, $"%{q}%") ||
+                    EF.Functions.ILike(a.ActionType, $"%{q}%"));
+            }
+
+            var total = await logs.CountAsync();
+
+            var items = await logs
                 .OrderByDescending(a => a.CreatedAt)
                 .ThenByDescending(a => a.Id)
-                .Skip((paging.Page - 1) * paging.PageSize)
-                .Take(paging.PageSize)
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
                 .Select(a => new ActivityLogDto
                 {
                     Id = a.Id,
@@ -67,37 +83,51 @@ namespace JiraLite.Infrastructure.Services
                 })
                 .ToListAsync();
 
-            // ✅ IMPORTANT: your PagedResult requires constructor args
-            return new PagedResult<ActivityLogDto>(items, paging.Page, paging.PageSize, total);
+            return new PagedResult<ActivityLogDto>(items, query.Page, query.PageSize, total);
         }
 
         public async Task<PagedResult<ActivityLogDto>> GetByTaskAsync(
             Guid taskId,
-            ActivityPagedQueryDto paging,
+            ActivityFilterQueryDto query,
             Guid currentUserId)
         {
-            // Task is soft-delete filtered; if deleted -> null -> 404
             var task = await _db.Tasks.FindAsync(taskId);
             if (task == null)
                 throw new NotFoundException("Task not found");
 
-            // 🔐 Membership check
             var isMember = await _db.ProjectMembers
                 .AnyAsync(pm => pm.ProjectId == task.ProjectId && pm.UserId == currentUserId);
 
             if (!isMember)
                 throw new ForbiddenException("You are not a member of this project.");
 
-            var query = _db.ActivityLogs
-                .Where(a => a.TaskId == taskId);
+            IQueryable<ActivityLog> logs = _db.ActivityLogs.Where(a => a.TaskId == taskId);
 
-            var total = await query.CountAsync();
+            // ✅ filters
+            if (!string.IsNullOrWhiteSpace(query.ActionType))
+                logs = logs.Where(a => a.ActionType == query.ActionType);
 
-            var items = await query
+            // TaskId filter is redundant here, but harmless; ignore it for clarity
+            if (query.ActorId.HasValue)
+                logs = logs.Where(a => a.ActorId == query.ActorId.Value);
+
+            if (!string.IsNullOrWhiteSpace(query.Q))
+            {
+                var q = query.Q.Trim();
+
+                logs = logs.Where(a =>
+                    EF.Functions.ILike(a.Message, $"%{q}%") ||
+                    EF.Functions.ILike(a.ActionType, $"%{q}%"));
+            }
+
+
+            var total = await logs.CountAsync();
+
+            var items = await logs
                 .OrderByDescending(a => a.CreatedAt)
                 .ThenByDescending(a => a.Id)
-                .Skip((paging.Page - 1) * paging.PageSize)
-                .Take(paging.PageSize)
+                .Skip((query.Page - 1) * query.PageSize)
+                .Take(query.PageSize)
                 .Select(a => new ActivityLogDto
                 {
                     Id = a.Id,
@@ -110,7 +140,7 @@ namespace JiraLite.Infrastructure.Services
                 })
                 .ToListAsync();
 
-            return new PagedResult<ActivityLogDto>(items, paging.Page, paging.PageSize, total);
+            return new PagedResult<ActivityLogDto>(items, query.Page, query.PageSize, total);
         }
     }
 }
