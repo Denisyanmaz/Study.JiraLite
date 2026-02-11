@@ -35,7 +35,132 @@ namespace JiraLite.Infrastructure.Persistence
             base.OnModelCreating(modelBuilder);
 
             // ✅ Soft delete: hide deleted tasks everywhere by default
-            modelBuilder.Entity<TaskItem>().HasQueryFilter(t => !t.IsDeleted);
+            modelBuilder.Entity<TaskItem>()
+                .HasQueryFilter(t => !t.IsDeleted);
+
+            // ----------------------------
+            // Users
+            // ----------------------------
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.Property(u => u.Email)
+                      .IsRequired()
+                      .HasMaxLength(320); // RFC-safe max
+
+                entity.Property(u => u.PasswordHash)
+                      .IsRequired()
+                      .HasMaxLength(200);
+
+                entity.Property(u => u.Role)
+                      .IsRequired()
+                      .HasMaxLength(50);
+
+                entity.HasIndex(u => u.Email)
+                      .IsUnique();
+
+                entity.Property(u => u.IsActive)
+                      .HasDefaultValue(true);
+            });
+
+            // ----------------------------
+            // Projects
+            // ----------------------------
+            modelBuilder.Entity<Project>(entity =>
+            {
+                entity.Property(p => p.Name)
+                      .IsRequired()
+                      .HasMaxLength(200);
+
+                entity.Property(p => p.Description)
+                      .HasMaxLength(2000);
+
+                // owner is required (domain invariant)
+                entity.Property(p => p.OwnerId)
+                      .IsRequired();
+
+                entity.Property(p => p.IsArchived)
+                      .HasDefaultValue(false);
+
+                // Optional but very useful: allow same name across different owners, but not duplicated for same owner
+                entity.HasIndex(p => new { p.OwnerId, p.Name })
+                      .IsUnique();
+
+                // Relationship: Project -> Members
+                entity.HasMany(p => p.Members)
+                      .WithOne(pm => pm.Project)
+                      .HasForeignKey(pm => pm.ProjectId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Relationship: Project -> Tasks
+                entity.HasMany(p => p.Tasks)
+                      .WithOne() // TaskItem doesn’t currently have navigation Project
+                      .HasForeignKey(t => t.ProjectId)
+                      .OnDelete(DeleteBehavior.Restrict); // important: we soft-delete tasks; avoid cascades surprises
+            });
+
+            // ----------------------------
+            // Project Members
+            // ----------------------------
+            modelBuilder.Entity<ProjectMember>(entity =>
+            {
+                entity.Property(pm => pm.Role)
+                      .IsRequired()
+                      .HasMaxLength(20);
+
+                // DB-level prevention of duplicate membership
+                entity.HasIndex(pm => new { pm.ProjectId, pm.UserId })
+                      .IsUnique();
+
+                // FK: ProjectMember -> User
+                entity.HasOne(pm => pm.User)
+                      .WithMany() // User has no navigation collection
+                      .HasForeignKey(pm => pm.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // FK: ProjectMember -> Project configured above
+
+                // Postgres check constraint: role is Owner/Member only
+                entity.HasCheckConstraint(
+                    "CK_ProjectMembers_Role",
+                    @"""Role"" IN ('Owner','Member')");
+            });
+
+            // ----------------------------
+            // Tasks
+            // ----------------------------
+            modelBuilder.Entity<TaskItem>(entity =>
+            {
+                entity.Property(t => t.Title)
+                      .IsRequired()
+                      .HasMaxLength(100);
+
+                entity.Property(t => t.Description)
+                      .HasMaxLength(2000);
+
+                entity.Property(t => t.Priority)
+                      .IsRequired();
+
+                entity.Property(t => t.AssigneeId)
+                      .IsRequired();
+
+                entity.Property(t => t.ProjectId)
+                      .IsRequired();
+
+                entity.Property(t => t.IsDeleted)
+                      .HasDefaultValue(false);
+
+                // Postgres check constraint: priority range
+                entity.HasCheckConstraint(
+                    "CK_Tasks_Priority",
+                    @"""Priority"" >= 1 AND ""Priority"" <= 5");
+
+                // Helpful indexes for your common queries
+                entity.HasIndex(t => t.ProjectId);
+                entity.HasIndex(t => new { t.ProjectId, t.Status });
+                entity.HasIndex(t => new { t.ProjectId, t.IsDeleted });
+                entity.HasIndex(t => new { t.ProjectId, t.AssigneeId });
+                entity.HasIndex(t => t.DueDate);
+            });
 
             // ----------------------------
             // Comments
@@ -46,9 +171,15 @@ namespace JiraLite.Infrastructure.Persistence
                       .IsRequired()
                       .HasMaxLength(2000);
 
+                entity.Property(c => c.AuthorId)
+                      .IsRequired();
+
+                entity.Property(c => c.TaskId)
+                      .IsRequired();
+
                 // Relationship: TaskComment -> TaskItem (many-to-one)
                 entity.HasOne(c => c.Task)
-                      .WithMany() // keep simple; we can add TaskItem.Comments later if you want
+                      .WithMany() // keep simple; can add TaskItem.Comments later if you want
                       .HasForeignKey(c => c.TaskId)
                       .OnDelete(DeleteBehavior.Cascade);
 
@@ -63,6 +194,12 @@ namespace JiraLite.Infrastructure.Persistence
             // ----------------------------
             modelBuilder.Entity<ActivityLog>(entity =>
             {
+                entity.Property(a => a.ProjectId)
+                      .IsRequired();
+
+                entity.Property(a => a.ActorId)
+                      .IsRequired();
+
                 entity.Property(a => a.ActionType)
                       .IsRequired()
                       .HasMaxLength(100);
@@ -71,9 +208,19 @@ namespace JiraLite.Infrastructure.Persistence
                       .IsRequired()
                       .HasMaxLength(2000);
 
-                entity.HasIndex(a => a.ProjectId);
-                entity.HasIndex(a => a.TaskId);
-                entity.HasIndex(a => a.CreatedAt);
+                // FK: ActivityLog -> Project (activity feed must always belong to project)
+                entity.HasOne<Project>()
+                      .WithMany()
+                      .HasForeignKey(a => a.ProjectId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Optional FK-ish: ActivityLog.TaskId exists but task can be deleted/soft-deleted.
+                // Keep it nullable and do NOT enforce cascade relationship to avoid surprises.
+
+                // Indexes for feeds
+                entity.HasIndex(a => new { a.ProjectId, a.CreatedAt });
+                entity.HasIndex(a => new { a.TaskId, a.CreatedAt });
+                entity.HasIndex(a => a.ActorId);
             });
         }
 
