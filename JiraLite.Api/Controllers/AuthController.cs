@@ -1,6 +1,9 @@
 ﻿using JiraLite.Application.DTOs;
 using JiraLite.Application.Interfaces;
+using JiraLite.Infrastructure.Persistence;   // ✅ YOUR DbContext namespace
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace JiraLite.Api.Controllers
 {
@@ -9,10 +12,12 @@ namespace JiraLite.Api.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly JiraLiteDbContext _db;   // ✅ FIX
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, JiraLiteDbContext db)
         {
             _authService = authService;
+            _db = db;
         }
 
         [HttpPost("register")]
@@ -27,6 +32,26 @@ namespace JiraLite.Api.Controllers
         {
             var result = await _authService.LoginAsync(dto);
             return Ok(result);
+        }
+
+        [Authorize]
+        [HttpGet("/api/users/resolve")]
+        public async Task<IActionResult> ResolveUser([FromQuery] string q)
+        {
+            if (Guid.TryParse(q, out var id))
+                return Ok(new { userId = id });
+
+            var email = q.Trim().ToLower();
+
+            var user = await _db.Users
+                .Where(u => u.Email.ToLower() == email)
+                .Select(u => new { u.Id })
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+                return NotFound("User not found.");
+
+            return Ok(new { userId = user.Id });
         }
     }
 }

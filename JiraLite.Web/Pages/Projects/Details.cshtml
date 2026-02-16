@@ -367,17 +367,9 @@ else
                             <input type="hidden" name="tab" value="members" />
 
                             <div class="col-md-8">
-                                <label class="form-label">UserId (Guid)</label>
-                                <input class="form-control" asp-for="AddMemberInput.UserId" />
-                                <span class="text-danger" asp-validation-for="AddMemberInput.UserId"></span>
-                            </div>
-
-                            <div class="col-md-2">
-                                <label class="form-label">Role</label>
-                                <select class="form-select" asp-for="AddMemberInput.Role">
-                                    <option value="Member">Member</option>
-                                </select>
-                                <span class="text-danger" asp-validation-for="AddMemberInput.Role"></span>
+                                <label class="form-label">User Email</label>
+                                <input class="form-control" asp-for="AddMemberInput.Email" />
+                                <span asp-validation-for="AddMemberInput.Email" class="text-danger"></span>
                             </div>
 
                             <div class="col-md-2 d-flex align-items-end">
@@ -417,7 +409,7 @@ else
                                     var confirmText = canMemberLeave ? "Leave this project?" : "Remove this member?";
 
                                     <tr>
-                                        <td><code>@m.UserId</code></td>
+                                        <td>@(m.Email ?? m.UserId.ToString())</td>
                                         <td>
                                             <span class="badge @(m.Role == "Owner" ? "bg-dark" : "bg-secondary")">@m.Role</span>
                                         </td>

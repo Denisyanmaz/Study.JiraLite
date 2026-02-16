@@ -1,10 +1,12 @@
-using System.Net.Http.Headers;
 using JiraLite.Web.Infrastructure;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+
 builder.Services.AddAuthentication("Cookies")
     .AddCookie("Cookies", options =>
     {

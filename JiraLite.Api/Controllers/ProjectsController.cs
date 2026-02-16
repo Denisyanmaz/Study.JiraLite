@@ -50,7 +50,7 @@ namespace JiraLite.Api.Controllers
 
         // POST /api/projects/{projectId}/members
         [HttpPost("{projectId:guid}/members")]
-        public async Task<IActionResult> AddMember(Guid projectId, [FromBody] ProjectMemberDto dto)
+        public async Task<IActionResult> AddMember(Guid projectId, [FromBody] AddProjectMemberDto dto)
         {
             var currentUserId = GetCurrentUserId();
 

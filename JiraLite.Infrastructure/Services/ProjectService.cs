@@ -74,7 +74,7 @@ namespace JiraLite.Infrastructure.Services
                 .ToListAsync();
         }
 
-        public async Task<ProjectMemberDto> AddMemberAsync(Guid projectId, ProjectMemberDto dto, Guid currentUserId)
+        public async Task<ProjectMemberDto> AddMemberAsync(Guid projectId, AddProjectMemberDto dto, Guid currentUserId)
         {
             // Ensure project exists (so you get 404 not 500)
             var projectExists = await _db.Projects.AnyAsync(p => p.Id == projectId);
@@ -94,21 +94,28 @@ namespace JiraLite.Infrastructure.Services
 
             if (exists)
                 throw new ConflictException("User is already a member of this project.");
+            // Rule: owner cannot add another Owner via AddMember
 
             var member = new ProjectMember
             {
                 ProjectId = projectId,
                 UserId = dto.UserId,
-                Role = dto.Role
+                Role = "Member"
             };
 
             _db.ProjectMembers.Add(member);
             await _db.SaveChangesAsync();
 
+            var email = await _db.Users
+                .Where(u => u.Id == member.UserId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
+
             return new ProjectMemberDto
             {
                 UserId = member.UserId,
-                Role = member.Role
+                Role = member.Role,
+                Email = email
             };
         }
         public async Task<List<ProjectMemberDto>> GetMembersAsync(Guid projectId, Guid currentUserId)
@@ -126,16 +133,24 @@ namespace JiraLite.Infrastructure.Services
                 throw new ForbiddenException("You are not a member of this project.");
 
             // Return members
-            return await _db.ProjectMembers
-                .Where(pm => pm.ProjectId == projectId)
-                .OrderByDescending(pm => pm.Role == "Owner") // owners first
-                .ThenBy(pm => pm.UserId)
-                .Select(pm => new ProjectMemberDto
+            var members = await (
+                from pm in _db.ProjectMembers
+                join u in _db.Users on pm.UserId equals u.Id
+                where pm.ProjectId == projectId
+                      && _db.ProjectMembers.Any(x => x.ProjectId == projectId && x.UserId == currentUserId)
+                orderby (pm.Role == "Owner") descending, pm.UserId
+                select new ProjectMemberDto
                 {
                     UserId = pm.UserId,
-                    Role = pm.Role
-                })
-                .ToListAsync();
+                    Role = pm.Role,
+                    Email = u.Email
+                }
+            ).ToListAsync();
+
+            if (members.Count == 0)
+                throw new ForbiddenException("You are not a member of this project.");
+
+            return members;
         }
         public async Task RemoveMemberAsync(Guid projectId, Guid memberUserId, Guid currentUserId)
         {

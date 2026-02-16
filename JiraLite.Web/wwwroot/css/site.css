@@ -29,3 +29,24 @@ body {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
 }
+.home-bg {
+    min-height: 100vh;
+    background-image: url('/images/bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+    display: flex; /* ✅ enable flex */
+    align-items: center; /* ✅ vertical center */
+}
+    .home-bg::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.45); /* adjust darkness */
+    }
+
+    .home-bg > .container {
+        position: relative;
+        z-index: 1;
+    }
