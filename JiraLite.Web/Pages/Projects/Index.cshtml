@@ -3,10 +3,6 @@
 
 <div style="display:flex; justify-content:space-between; align-items:center;">
     <h2>My Projects</h2>
-    <div>
-        <a href="/Projects/Create">Create Project</a> |
-        <a href="/Logout">Logout</a>
-    </div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Model.Error))
@@ -35,7 +31,6 @@ else if (Model.Projects.Count > 0)
             @foreach (var p in Model.Projects)
             {
                 <tr>
-                    <!-- ✅ Clickable for upcoming Project Details page -->
                     <td>
                         <a href="/Projects/Details/@p.Id">
                             @p.Name

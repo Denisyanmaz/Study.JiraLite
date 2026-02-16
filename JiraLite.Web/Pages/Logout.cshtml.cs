@@ -11,5 +11,14 @@ namespace JiraLite.Web.Pages
             Response.Cookies.Delete("jiralite_email");
             return RedirectToPage("/Login");
         }
+
+        public IActionResult OnPost()
+        {
+            Response.Cookies.Delete("jiralite_jwt");
+            Response.Cookies.Delete("jiralite_email");
+
+            return RedirectToPage("/Login");
+        }
+
     }
 }

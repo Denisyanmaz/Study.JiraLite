@@ -111,6 +111,77 @@ namespace JiraLite.Infrastructure.Services
                 Role = member.Role
             };
         }
+        public async Task<List<ProjectMemberDto>> GetMembersAsync(Guid projectId, Guid currentUserId)
+        {
+            // Ensure project exists (404)
+            var projectExists = await _db.Projects.AnyAsync(p => p.Id == projectId);
+            if (!projectExists)
+                throw new KeyNotFoundException("Project not found");
+
+            // Must be a member to view members
+            var isMember = await _db.ProjectMembers
+                .AnyAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId);
+
+            if (!isMember)
+                throw new ForbiddenException("You are not a member of this project.");
+
+            // Return members
+            return await _db.ProjectMembers
+                .Where(pm => pm.ProjectId == projectId)
+                .OrderByDescending(pm => pm.Role == "Owner") // owners first
+                .ThenBy(pm => pm.UserId)
+                .Select(pm => new ProjectMemberDto
+                {
+                    UserId = pm.UserId,
+                    Role = pm.Role
+                })
+                .ToListAsync();
+        }
+        public async Task RemoveMemberAsync(Guid projectId, Guid memberUserId, Guid currentUserId)
+        {
+            // Ensure project exists (404)
+            var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+            if (project == null)
+                throw new KeyNotFoundException("Project not found");
+
+            // Must be a member at least
+            var currentMember = await _db.ProjectMembers
+                .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId);
+
+            if (currentMember == null)
+                throw new ForbiddenException("You are not a member of this project.");
+
+            // If current user is NOT owner -> can only remove himself (leave project)
+            if (!string.Equals(currentMember.Role, "Owner", StringComparison.OrdinalIgnoreCase))
+            {
+                if (memberUserId != currentUserId)
+                    throw new ForbiddenException("Members can only remove themselves (leave the project).");
+
+                // Member leaving: remove their membership record
+                var self = await _db.ProjectMembers
+                    .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId);
+
+                if (self == null)
+                    throw new KeyNotFoundException("Member not found");
+
+                _db.ProjectMembers.Remove(self);
+                await _db.SaveChangesAsync();
+                return;
+            }
+
+            // Owner flow: can remove other members, but cannot remove the project owner
+            if (memberUserId == project.OwnerId)
+                throw new ConflictException("You cannot remove the project owner.");
+
+            var member = await _db.ProjectMembers
+                .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == memberUserId);
+
+            if (member == null)
+                throw new KeyNotFoundException("Member not found");
+
+            _db.ProjectMembers.Remove(member);
+            await _db.SaveChangesAsync();
+        }
 
         public async Task<PagedResult<ProjectDto>> GetMyProjectsPagedAsync(Guid userId, int page, int pageSize)
         {

@@ -13,5 +13,8 @@ namespace JiraLite.Application.Interfaces
         Task<bool> IsOwnerAsync(Guid projectId, Guid userId);
         Task<bool> IsMemberAsync(Guid projectId, Guid userId);
         Task<PagedResult<ProjectDto>> GetMyProjectsPagedAsync(Guid userId, int page, int pageSize);
+        Task<List<ProjectMemberDto>> GetMembersAsync(Guid projectId, Guid currentUserId);
+        Task RemoveMemberAsync(Guid projectId, Guid memberUserId, Guid currentUserId);
+
     }
 }

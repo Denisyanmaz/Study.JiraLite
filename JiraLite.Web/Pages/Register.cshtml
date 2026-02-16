@@ -1,0 +1,38 @@
+﻿@page
+@model JiraLite.Web.Pages.RegisterModel
+
+<h2>Register</h2>
+
+@if (!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div style="color:red; white-space:pre-wrap">@Model.Error</div>
+}
+
+<form method="post">
+    <div>
+        <label>Email</label><br />
+        <input asp-for="Input.Email" />
+        <span asp-validation-for="Input.Email" style="color:red"></span>
+    </div>
+
+    <div style="margin-top:10px">
+        <label>Password</label><br />
+        <input asp-for="Input.Password" type="password" />
+        <span asp-validation-for="Input.Password" style="color:red"></span>
+    </div>
+
+    <div style="margin-top:10px">
+        <label>Confirm Password</label><br />
+        <input asp-for="Input.ConfirmPassword" type="password" />
+        <span asp-validation-for="Input.ConfirmPassword" style="color:red"></span>
+    </div>
+
+    <div style="margin-top:15px">
+        <button type="submit">Register</button>
+        <a href="/Login" style="margin-left:10px">Already have an account?</a>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

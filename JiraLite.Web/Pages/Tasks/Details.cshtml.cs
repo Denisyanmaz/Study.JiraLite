@@ -4,6 +4,7 @@ using JiraLite.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Net.Http.Json;
@@ -48,6 +49,47 @@ namespace JiraLite.Web.Pages.Tasks
 
         public async Task<IActionResult> OnGetAsync()
             => await LoadAsync();
+        private async Task LoadAssigneesAsync(HttpClient client)
+        {
+            AssigneeSelectItems = new List<SelectListItem>();
+
+            if (Task == null || Task.ProjectId == Guid.Empty)
+                return;
+
+            try
+            {
+                var resp = await client.GetAsync($"/api/projects/{Task.ProjectId}/members");
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var body = await resp.Content.ReadAsStringAsync();
+                    AssigneesError = $"Assignees load failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                    return;
+                }
+
+                var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+                // Owner first then by UserId (nice UX)
+                var ordered = members
+                    .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
+                    .ThenBy(m => m.UserId);
+
+                foreach (var m in ordered)
+                {
+                    AssigneeSelectItems.Add(new SelectListItem
+                    {
+                        Value = m.UserId.ToString(),
+                        Text = $"{m.UserId} ({m.Role})"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                AssigneesError = $"Assignees load exception: {ex.Message}";
+            }
+        }
+
+        public List<SelectListItem> AssigneeSelectItems { get; private set; } = new();
+        public string? AssigneesError { get; private set; } // optional, for debugging UI
 
         public async Task<IActionResult> OnPostAddCommentAsync()
         {
@@ -199,6 +241,7 @@ namespace JiraLite.Web.Pages.Tasks
                     Error = "Task not found.";
                     return Page();
                 }
+                await LoadAssigneesAsync(client);
             }
 
             // 2) Comments (load on comments tab)

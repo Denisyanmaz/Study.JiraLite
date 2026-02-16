@@ -16,7 +16,6 @@
         {
             <a class="btn btn-outline-secondary" href="/Projects/Details/@Model.Task.ProjectId">Back to Project</a>
         }
-        <a class="btn btn-outline-danger" href="/Logout">Logout</a>
     </div>
 </div>
 
@@ -107,7 +106,14 @@ else
                 <div class="row g-3 mt-1">
                     <div class="col-md-6">
                         <label class="text-muted small mb-1">AssigneeId (GUID)</label>
-                        <input id="assigneeId" class="form-control" value="@Model.Task?.AssigneeId" />
+                        <select id="assigneeId" class="form-select">
+                            @foreach (var opt in Model.AssigneeSelectItems)
+                            {
+                                <option value="@opt.Value" selected="@(opt.Value == (Model.Task?.AssigneeId.ToString() ?? ""))">
+                                    @opt.Text
+                                </option>
+                            }
+                        </select>
                     </div>
 
                     <div class="col-md-6 d-flex align-items-end justify-content-end gap-2">

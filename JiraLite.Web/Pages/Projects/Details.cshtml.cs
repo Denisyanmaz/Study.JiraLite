@@ -4,11 +4,13 @@ using JiraLite.Domain.Entities;
 using JiraLite.Domain.Enums;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text;
 
 namespace JiraLite.Web.Pages.Projects
@@ -22,15 +24,15 @@ namespace JiraLite.Web.Pages.Projects
             _httpClientFactory = httpClientFactory;
         }
 
-        // Route param
+        // -------------------- Route --------------------
         [FromRoute(Name = "id")]
         public Guid ProjectId { get; set; }
 
-        // Tabs
+        // -------------------- Tabs --------------------
         [BindProperty(SupportsGet = true, Name = "tab")]
-        public string Tab { get; set; } = "board"; // board | activity
+        public string Tab { get; set; } = "board"; // board | activity | members
 
-        // ----- Board query params -----
+        // -------------------- Board query params --------------------
         [FromQuery(Name = "status")]
         public JiraTaskStatus? Status { get; set; }
 
@@ -52,7 +54,7 @@ namespace JiraLite.Web.Pages.Projects
         [FromQuery(Name = "pageSize")]
         public int PageSize { get; set; } = 15;
 
-        // ----- Activity query params -----
+        // -------------------- Activity query params --------------------
         [FromQuery(Name = "aPage")]
         public int ActivityPage { get; set; } = 1;
 
@@ -71,13 +73,27 @@ namespace JiraLite.Web.Pages.Projects
         [FromQuery(Name = "q")]
         public string? ActivityQ { get; set; }
 
-        // Create Task form
+        // -------------------- Members --------------------
+        public List<ProjectMemberDto> Members { get; private set; } = new();
+        public string? MembersError { get; private set; }
+
+        [BindProperty]
+        public ProjectMemberDto AddMemberInput { get; set; } = new();
+
+        // ✅ For UI permissions (Leave/Remove rendering)
+        public Guid CurrentUserId { get; private set; }
+        public string? CurrentUserRole { get; private set; }
+
+        // -------------------- Create Task --------------------
         [BindProperty]
         public CreateTaskInputModel CreateTaskInput { get; set; } = new();
 
         public string? CreateError { get; private set; }
 
-        // View data
+        // Assignee dropdown data (this is what your cshtml expects)
+        public List<SelectListItem> AssigneeSelectItems { get; private set; } = new();
+
+        // -------------------- View data --------------------
         public string ProjectName { get; private set; } = "Project";
         public string? ProjectDescription { get; private set; }
 
@@ -90,28 +106,39 @@ namespace JiraLite.Web.Pages.Projects
         public int TotalPages =>
             PageSize <= 0 ? 1 : Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
 
-        // Project activity
         public PagedResult<ActivityLogDto>? ProjectActivity { get; private set; }
 
         public string? Error { get; private set; }
 
+        // ============================================================
+        // GET
+        // ============================================================
         public async Task<IActionResult> OnGetAsync() => await LoadPageAsync();
 
+        // ============================================================
+        // POST: Create Task
+        // ============================================================
         public async Task<IActionResult> OnPostCreateTaskAsync()
         {
+            Tab = "board";
+
+            // ✅ Clear existing validation results so AddMember fields never interfere
+            ModelState.Clear();
+
             // Fix PostgreSQL "DateTime Kind=Unspecified" for date-only UI input
             if (CreateTaskInput.DueDate.HasValue)
                 CreateTaskInput.DueDate = DateTime.SpecifyKind(CreateTaskInput.DueDate.Value, DateTimeKind.Utc);
 
-            if (ProjectId == Guid.Empty)
+            // ✅ Validate ONLY CreateTaskInput
+            if (!TryValidateModel(CreateTaskInput, nameof(CreateTaskInput)))
             {
-                Error = "Invalid project id.";
+                await LoadPageAsync();
                 return Page();
             }
 
-            if (!ModelState.IsValid)
+            if (ProjectId == Guid.Empty)
             {
-                Tab = "board";
+                Error = "Invalid project id.";
                 await LoadPageAsync();
                 return Page();
             }
@@ -138,15 +165,99 @@ namespace JiraLite.Web.Pages.Projects
             {
                 var body = await resp.Content.ReadAsStringAsync();
                 CreateError = $"Create failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
-                Tab = "board";
                 await LoadPageAsync();
                 return Page();
             }
 
-            // After create => back to board page 1 (keep board)
             return Redirect(BoardPageLink(1));
         }
 
+        // ============================================================
+        // POST: Add Member
+        // ============================================================
+        public async Task<IActionResult> OnPostAddMemberAsync()
+        {
+            Tab = "members";
+
+            // ✅ Clear existing validation results (prevents other form fields like "Title" from blocking)
+            ModelState.Clear();
+
+            // ✅ Validate ONLY AddMemberInput
+            if (!TryValidateModel(AddMemberInput, nameof(AddMemberInput)))
+            {
+                var allErrors = ModelState
+                    .Where(kvp => kvp.Value?.Errors?.Count > 0)
+                    .SelectMany(kvp => kvp.Value!.Errors.Select(e => $"{kvp.Key}: {e.ErrorMessage}"))
+                    .ToList();
+
+                MembersError = "ModelState invalid:\n" + string.Join("\n", allErrors);
+
+                await LoadPageAsync();
+                return Page();
+            }
+
+            if (ProjectId == Guid.Empty)
+            {
+                MembersError = "ProjectId is empty. The form post did not include the {id} route value.";
+                await LoadPageAsync();
+                return Page();
+            }
+
+            var client = _httpClientFactory.CreateClient("JiraLiteApi");
+
+            var dto = new ProjectMemberDto
+            {
+                UserId = AddMemberInput.UserId,
+                Role = AddMemberInput.Role
+            };
+
+            var resp = await client.PostAsJsonAsync($"/api/projects/{ProjectId}/members", dto);
+
+            if (resp.StatusCode == HttpStatusCode.Unauthorized)
+                return RedirectToPage("/Login");
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                MembersError = $"Add member failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                await LoadPageAsync();
+                return Page();
+            }
+
+            // ✅ Reset the input so it doesn't stay in the textbox
+            AddMemberInput = new ProjectMemberDto();
+
+            return Redirect($"/Projects/Details/{ProjectId}?tab=members");
+        }
+
+
+        // ============================================================
+        // POST: Remove Member (Owner removes member OR member leaves)
+        // ============================================================
+        public async Task<IActionResult> OnPostRemoveMemberAsync([FromForm] Guid memberUserId)
+        {
+            Tab = "members";
+
+            var client = _httpClientFactory.CreateClient("JiraLiteApi");
+            var resp = await client.DeleteAsync($"/api/projects/{ProjectId}/members/{memberUserId}");
+
+            if (resp.StatusCode == HttpStatusCode.Unauthorized)
+                return RedirectToPage("/Login");
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                MembersError = $"Remove failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                await LoadPageAsync();
+                return Page();
+            }
+
+            return Redirect($"/Projects/Details/{ProjectId}?tab=members");
+        }
+
+        // ============================================================
+        // Page loader
+        // ============================================================
         private async Task<IActionResult> LoadPageAsync()
         {
             if (ProjectId == Guid.Empty)
@@ -180,7 +291,12 @@ namespace JiraLite.Web.Pages.Projects
             ProjectDescription = project.Description;
 
             // 2) Load tab content
-            if (string.Equals(Tab, "activity", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(Tab, "members", StringComparison.OrdinalIgnoreCase))
+            {
+                Tab = "members";
+                await LoadMembersAsync(client);
+            }
+            else if (string.Equals(Tab, "activity", StringComparison.OrdinalIgnoreCase))
             {
                 Tab = "activity";
                 await LoadActivityAsync(client);
@@ -189,6 +305,9 @@ namespace JiraLite.Web.Pages.Projects
             {
                 Tab = "board";
                 await LoadBoardAsync(client);
+
+                // ✅ always prepare assignee dropdown on board view
+                await LoadAssigneeSelectItemsAsync(client);
             }
 
             return Page();
@@ -244,6 +363,7 @@ namespace JiraLite.Web.Pages.Projects
             var url = $"/api/activity/project/{ProjectId}?{string.Join("&", qs)}";
 
             var resp = await client.GetAsync(url);
+
             if (resp.StatusCode == HttpStatusCode.Unauthorized)
             {
                 Error = "Unauthorized.";
@@ -258,6 +378,89 @@ namespace JiraLite.Web.Pages.Projects
             }
 
             ProjectActivity = await resp.Content.ReadFromJsonAsync<PagedResult<ActivityLogDto>>();
+        }
+
+        private async Task LoadMembersAsync(HttpClient client)
+        {
+            var resp = await client.GetAsync($"/api/projects/{ProjectId}/members");
+
+            if (resp.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                MembersError = "Unauthorized.";
+                return;
+            }
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                MembersError = $"API error (members): {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                return;
+            }
+
+            Members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+            // ✅ Determine current user + role (used by UI rendering)
+            CurrentUserId = GetCurrentUserIdFromJwtCookie();
+            CurrentUserRole = Members.FirstOrDefault(m => m.UserId == CurrentUserId)?.Role;
+        }
+
+        // ✅ Read current user id from JWT cookie: jiralite_jwt
+        private Guid GetCurrentUserIdFromJwtCookie()
+        {
+            if (!Request.Cookies.TryGetValue("jiralite_jwt", out var token) || string.IsNullOrWhiteSpace(token))
+                return Guid.Empty;
+
+            try
+            {
+                var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+
+                // Your API uses NameClaimType = "id"
+                var idClaim = jwt.Claims.FirstOrDefault(c => c.Type == "id")?.Value
+                           ?? jwt.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value
+                           ?? jwt.Claims.FirstOrDefault(c => c.Type == "sub")?.Value
+                           ?? jwt.Subject;
+
+                if (string.IsNullOrWhiteSpace(idClaim))
+                    return Guid.Empty;
+
+                return Guid.TryParse(idClaim, out var userId) ? userId : Guid.Empty;
+            }
+            catch
+            {
+                return Guid.Empty;
+            }
+        }
+
+        // ✅ This builds your dropdown items for Create Task
+        private async Task LoadAssigneeSelectItemsAsync(HttpClient client)
+        {
+            AssigneeSelectItems = new List<SelectListItem>();
+
+            try
+            {
+                var resp = await client.GetAsync($"/api/projects/{ProjectId}/members");
+                if (!resp.IsSuccessStatusCode) return;
+
+                var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+                // Owner first, then members
+                var ordered = members
+                    .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
+                    .ThenBy(m => m.UserId);
+
+                foreach (var m in ordered)
+                {
+                    AssigneeSelectItems.Add(new SelectListItem
+                    {
+                        Value = m.UserId.ToString(),
+                        Text = $"{m.UserId} ({m.Role})"
+                    });
+                }
+            }
+            catch
+            {
+                // swallow; dropdown will just be empty
+            }
         }
 
         private static string BuildTasksUrl(
@@ -285,7 +488,6 @@ namespace JiraLite.Web.Pages.Projects
             return $"/api/tasks/project/{projectId}/paged?{string.Join("&", qs)}";
         }
 
-        // Board paging link (keeps tab=board + filters)
         public string BoardPageLink(int page)
         {
             var parts = new List<string> { "tab=board" };
@@ -302,7 +504,6 @@ namespace JiraLite.Web.Pages.Projects
             return $"/Projects/Details/{ProjectId}?{string.Join("&", parts)}";
         }
 
-        // Activity paging link (keeps tab=activity + filters)
         public string ActivityPageLink(int page)
         {
             var parts = new List<string> { "tab=activity" };
@@ -321,7 +522,7 @@ namespace JiraLite.Web.Pages.Projects
         public string TabLink(string tab)
             => $"/Projects/Details/{ProjectId}?tab={tab}";
 
-        // Small helper to avoid duplicating 3 columns of markup
+        // ✅ RenderColumn (kept exactly as your version)
         public IHtmlContent RenderColumn(string status, List<TaskItem> items)
         {
             var title = status switch
@@ -350,11 +551,6 @@ namespace JiraLite.Web.Pages.Projects
                 _ => "bg-secondary"
             };
 
-            // Due date badges:
-            // - Overdue (red)
-            // - Due soon (orange) within 3 days
-            // - Due later (muted)
-            // - No due (-)
             (string text, string css) DueBadge(DateTime? due)
             {
                 if (!due.HasValue) return ("No due", "bg-light text-dark");
@@ -388,8 +584,6 @@ namespace JiraLite.Web.Pages.Projects
                     var prioCss = PriorityBadgeClass(t.Priority);
                     var (dueText, dueCss) = DueBadge(t.DueDate);
 
-                    // Optional "quick status" dropdown (works with your existing JS endpoint)
-                    // If you don't want it, delete the <select> block below.
                     var statusSelect = $@"
 <select class=""form-select form-select-sm quick-status""
         data-task-id=""{t.Id}"" style=""max-width: 140px;"">
@@ -437,7 +631,7 @@ namespace JiraLite.Web.Pages.Projects
             return new HtmlString(sb.ToString());
         }
 
-
+        // UI Model (keep here for now; moving to DTO is optional)
         public class CreateTaskInputModel
         {
             [Required]
@@ -457,6 +651,5 @@ namespace JiraLite.Web.Pages.Projects
 
             public DateTime? DueDate { get; set; }
         }
-
     }
 }

@@ -19,18 +19,12 @@ namespace JiraLite.Api.Controllers
             _projectService = projectService;
         }
 
-        [HttpPost("{projectId}/members")]
-        public async Task<IActionResult> AddMember(Guid projectId, [FromBody] ProjectMemberDto dto)
-        {
-            var currentUserId = GetCurrentUserId();
-
-            // Let service enforce owner/duplicate/etc; filter will map exceptions
-            var memberDto = await _projectService.AddMemberAsync(projectId, dto, currentUserId);
-            return Ok(memberDto);
-        }
+        // -----------------------------
+        // Projects
+        // -----------------------------
 
         [HttpPost]
-        public async Task<IActionResult> Create(CreateProjectDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateProjectDto dto)
         {
             var result = await _projectService.CreateAsync(GetCurrentUserId(), dto);
             return Ok(result);
@@ -49,6 +43,48 @@ namespace JiraLite.Api.Controllers
             var result = await _projectService.GetMyProjectsPagedAsync(GetCurrentUserId(), q.Page, q.PageSize);
             return Ok(result);
         }
+
+        // -----------------------------
+        // Members
+        // -----------------------------
+
+        // POST /api/projects/{projectId}/members
+        [HttpPost("{projectId:guid}/members")]
+        public async Task<IActionResult> AddMember(Guid projectId, [FromBody] ProjectMemberDto dto)
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var memberDto = await _projectService.AddMemberAsync(projectId, dto, currentUserId);
+
+            // returns the member that was added
+            return Ok(memberDto);
+        }
+
+        // GET /api/projects/{projectId}/members
+        [HttpGet("{projectId:guid}/members")]
+        public async Task<IActionResult> GetMembers(Guid projectId)
+        {
+            var currentUserId = GetCurrentUserId();
+
+            var members = await _projectService.GetMembersAsync(projectId, currentUserId);
+
+            return Ok(members);
+        }
+
+        // DELETE /api/projects/{projectId}/members/{memberUserId}
+        [HttpDelete("{projectId:guid}/members/{memberUserId:guid}")]
+        public async Task<IActionResult> RemoveMember(Guid projectId, Guid memberUserId)
+        {
+            var currentUserId = GetCurrentUserId();
+
+            await _projectService.RemoveMemberAsync(projectId, memberUserId, currentUserId);
+
+            return NoContent();
+        }
+
+        // -----------------------------
+        // Helpers
+        // -----------------------------
 
         private Guid GetCurrentUserId()
         {
