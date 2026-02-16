@@ -1,8 +1,10 @@
 ﻿using JiraLite.Application.DTOs;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.ComponentModel.DataAnnotations;
 using System.Net.Http.Json;
+using System.Security.Claims;
 
 namespace JiraLite.Web.Pages
 {
@@ -72,6 +74,21 @@ namespace JiraLite.Web.Pages
                 SameSite = SameSiteMode.Lax,
                 Expires = DateTimeOffset.UtcNow.AddHours(4)
             });
+            // ✅ Also sign-in using ASP.NET Cookie auth so User.Identity.IsAuthenticated becomes true
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Email, auth.Email ?? Input.Email),
+            };
+
+            var identity = new ClaimsIdentity(claims, "Cookies");
+            var principal = new ClaimsPrincipal(identity);
+
+            await HttpContext.SignInAsync("Cookies", principal, new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(4)
+            });
+
 
             return RedirectToPage("/Projects/Index");
         }

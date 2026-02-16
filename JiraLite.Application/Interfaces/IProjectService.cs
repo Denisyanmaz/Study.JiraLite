@@ -9,7 +9,7 @@ namespace JiraLite.Application.Interfaces
         Task<List<ProjectDto>> GetMyProjectsAsync(Guid userId);
 
         // Step 6.2: Project members / role enforcement
-        Task<ProjectMemberDto> AddMemberAsync(Guid projectId, ProjectMemberDto dto, Guid currentUserId);
+        Task<ProjectMemberDto> AddMemberAsync(Guid projectId, AddProjectMemberDto dto, Guid currentUserId);
         Task<bool> IsOwnerAsync(Guid projectId, Guid userId);
         Task<bool> IsMemberAsync(Guid projectId, Guid userId);
         Task<PagedResult<ProjectDto>> GetMyProjectsPagedAsync(Guid userId, int page, int pageSize);

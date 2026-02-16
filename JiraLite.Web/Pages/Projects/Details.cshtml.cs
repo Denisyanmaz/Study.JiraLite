@@ -53,6 +53,8 @@ namespace JiraLite.Web.Pages.Projects
 
         [FromQuery(Name = "pageSize")]
         public int PageSize { get; set; } = 15;
+        public Dictionary<Guid, string?> AssigneeEmailById { get; private set; } = new();
+
 
         // -------------------- Activity query params --------------------
         [FromQuery(Name = "aPage")]
@@ -77,8 +79,18 @@ namespace JiraLite.Web.Pages.Projects
         public List<ProjectMemberDto> Members { get; private set; } = new();
         public string? MembersError { get; private set; }
 
+        public class AddMemberInputModel
+        {
+            [Required]
+            [EmailAddress]
+            public string Email { get; set; } = "";
+
+            public string Role { get; set; } = "Member";
+        }
+
         [BindProperty]
-        public ProjectMemberDto AddMemberInput { get; set; } = new();
+        public AddMemberInputModel AddMemberInput { get; set; } = new();
+
 
         // ✅ For UI permissions (Leave/Remove rendering)
         public Guid CurrentUserId { get; private set; }
@@ -204,10 +216,29 @@ namespace JiraLite.Web.Pages.Projects
             }
 
             var client = _httpClientFactory.CreateClient("JiraLiteApi");
+            var email = AddMemberInput.Email.Trim();
+
+            var resolveResp = await client.GetAsync($"/api/users/resolve?q={Uri.EscapeDataString(email)}");
+
+            if (!resolveResp.IsSuccessStatusCode)
+            {
+                var body = await resolveResp.Content.ReadAsStringAsync();
+                MembersError = $"User resolve failed: {(int)resolveResp.StatusCode} {resolveResp.ReasonPhrase}\n{body}";
+                await LoadPageAsync();
+                return Page();
+            }
+
+            var resolved = await resolveResp.Content.ReadFromJsonAsync<ResolveUserResponse>();
+            if (resolved == null || resolved.UserId == Guid.Empty)
+            {
+                MembersError = "User resolve failed: invalid response.";
+                await LoadPageAsync();
+                return Page();
+            }
 
             var dto = new ProjectMemberDto
             {
-                UserId = AddMemberInput.UserId,
+                UserId = resolved.UserId,
                 Role = AddMemberInput.Role
             };
 
@@ -225,7 +256,7 @@ namespace JiraLite.Web.Pages.Projects
             }
 
             // ✅ Reset the input so it doesn't stay in the textbox
-            AddMemberInput = new ProjectMemberDto();
+            AddMemberInput = new AddMemberInputModel();
 
             return Redirect($"/Projects/Details/{ProjectId}?tab=members");
         }
@@ -435,6 +466,7 @@ namespace JiraLite.Web.Pages.Projects
         private async Task LoadAssigneeSelectItemsAsync(HttpClient client)
         {
             AssigneeSelectItems = new List<SelectListItem>();
+            AssigneeEmailById = new Dictionary<Guid, string?>();
 
             try
             {
@@ -446,14 +478,22 @@ namespace JiraLite.Web.Pages.Projects
                 // Owner first, then members
                 var ordered = members
                     .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
-                    .ThenBy(m => m.UserId);
+                    .ThenBy(m => m.Email ?? m.UserId.ToString()); // stable sort
 
                 foreach (var m in ordered)
                 {
+                    // ✅ map for board display
+                    AssigneeEmailById[m.UserId] = m.Email;
+
+                    // ✅ dropdown text shows email instead of guid (value remains guid!)
+                    var label = string.IsNullOrWhiteSpace(m.Email)
+                        ? $"{m.UserId} ({m.Role})"
+                        : $"{m.Email} ({m.Role})";
+
                     AssigneeSelectItems.Add(new SelectListItem
                     {
                         Value = m.UserId.ToString(),
-                        Text = $"{m.UserId} ({m.Role})"
+                        Text = label
                     });
                 }
             }
@@ -461,6 +501,11 @@ namespace JiraLite.Web.Pages.Projects
             {
                 // swallow; dropdown will just be empty
             }
+        }
+
+        public class ResolveUserResponse
+        {
+            public Guid UserId { get; set; }
         }
 
         private static string BuildTasksUrl(
@@ -583,6 +628,10 @@ namespace JiraLite.Web.Pages.Projects
                     var prioText = PriorityText(t.Priority);
                     var prioCss = PriorityBadgeClass(t.Priority);
                     var (dueText, dueCss) = DueBadge(t.DueDate);
+                    var assigneeLabel = AssigneeEmailById.TryGetValue(t.AssigneeId, out var email)
+    && !string.IsNullOrWhiteSpace(email)
+        ? email
+        : t.AssigneeId.ToString();
 
                     var statusSelect = $@"
 <select class=""form-select form-select-sm quick-status""
@@ -617,7 +666,7 @@ namespace JiraLite.Web.Pages.Projects
       </div>
 
       <div class=""text-muted small mt-2"">
-        Assignee: <code>{t.AssigneeId}</code>
+        Assignee: <code>{System.Net.WebUtility.HtmlEncode(assigneeLabel)}</code>
       </div>
     </div>
   </div>
