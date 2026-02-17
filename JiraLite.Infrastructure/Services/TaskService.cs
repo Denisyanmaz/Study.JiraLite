@@ -1,6 +1,5 @@
-﻿using JiraLite.Application.DTOs;
-using JiraLite.Application.DTOs.Common;
-using JiraLite.Application.DTOs.Tasks;
+﻿using JiraLite.Application.DTOs.Common;
+using JiraLite.Application.DTOs.Task;
 using JiraLite.Application.Exceptions;
 using JiraLite.Application.Interfaces;
 using JiraLite.Domain.Entities;

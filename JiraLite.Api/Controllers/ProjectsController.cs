@@ -1,5 +1,5 @@
-﻿using JiraLite.Application.DTOs;
-using JiraLite.Application.DTOs.Common;
+﻿using JiraLite.Application.DTOs.Common;
+using JiraLite.Application.DTOs.Project;
 using JiraLite.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

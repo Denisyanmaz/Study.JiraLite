@@ -11,12 +11,18 @@ using NSwag;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using FluentValidation;
+using FluentValidation.AspNetCore;
+
 
 // ✅ VERY IMPORTANT: stop ASP.NET from remapping JWT claims (sub → NameIdentifier)
 JwtSecurityTokenHandler.DefaultMapInboundClaims = false;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ✅ Allow user-secrets for local runs even in Production environment
+// (User-secrets exist only on your machine; server won't have them anyway.)
+builder.Configuration.AddUserSecrets<Program>(optional: true);
 // 🔹 Add services to the container
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -31,6 +37,10 @@ builder.Services.AddControllers()
             return new BadRequestObjectResult(problem);
         };
     });
+// ✅ FluentValidation (correct placement)
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddFluentValidationClientsideAdapters();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
@@ -54,6 +64,8 @@ builder.Services.AddOpenApiDocument(config =>
 builder.Services.AddDbContext<JiraLiteDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 // 🔹 Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -99,11 +111,12 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // 🔹 Middleware pipeline
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseOpenApi();
     app.UseSwaggerUi();
 }
+
 app.UseMiddleware<JiraLite.Api.Middleware.ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();

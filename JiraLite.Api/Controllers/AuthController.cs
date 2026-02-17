@@ -1,4 +1,4 @@
-﻿using JiraLite.Application.DTOs;
+﻿using JiraLite.Application.DTOs.Auth;
 using JiraLite.Application.Interfaces;
 using JiraLite.Infrastructure.Persistence;   // ✅ YOUR DbContext namespace
 using Microsoft.AspNetCore.Authorization;
@@ -33,6 +33,20 @@ namespace JiraLite.Api.Controllers
             var result = await _authService.LoginAsync(dto);
             return Ok(result);
         }
+        [HttpPost("verify-email")]
+        public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto dto)
+        {
+            await _authService.VerifyEmailAsync(dto.Email, dto.Code);
+            return Ok(new { message = "Email verified." });
+        }
+
+        [HttpPost("resend-verification")]
+        public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationDto dto)
+        {
+            await _authService.ResendVerificationAsync(dto.Email);
+            return Ok(new { message = "Verification code sent." });
+        }
+
 
         [Authorize]
         [HttpGet("/api/users/resolve")]

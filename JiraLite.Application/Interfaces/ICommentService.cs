@@ -1,4 +1,4 @@
-﻿using JiraLite.Application.DTOs;
+﻿using JiraLite.Application.DTOs.Comment;
 
 namespace JiraLite.Application.Interfaces
 {

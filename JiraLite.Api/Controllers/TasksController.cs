@@ -1,5 +1,4 @@
-﻿using JiraLite.Application.DTOs;
-using JiraLite.Application.DTOs.Tasks;
+﻿using JiraLite.Application.DTOs.Task;
 using JiraLite.Application.Interfaces;
 using JiraLite.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;

@@ -1,6 +1,6 @@
 ﻿using JiraLite.Domain.Enums;
 
-namespace JiraLite.Application.DTOs
+namespace JiraLite.Application.DTOs.Task
 {
     public class UpdateTaskStatusDto
     {

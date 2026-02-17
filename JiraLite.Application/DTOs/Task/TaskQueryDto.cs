@@ -2,7 +2,7 @@
 using JiraLite.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
 
-namespace JiraLite.Application.DTOs.Tasks;
+namespace JiraLite.Application.DTOs.Task;
 
 public sealed class TaskQueryDto : TasksPagedQueryDto
 {

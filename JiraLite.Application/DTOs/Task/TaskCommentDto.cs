@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace JiraLite.Application.DTOs
+namespace JiraLite.Application.DTOs.Task
 {
     public class TaskCommentDto
     {

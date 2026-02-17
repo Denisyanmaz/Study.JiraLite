@@ -21,6 +21,15 @@ namespace JiraLite.Api.Middleware
             {
                 await WriteProblem(context, StatusCodes.Status401Unauthorized, ex.Message);
             }
+            catch (BadRequestException ex)
+            {
+                await WriteProblem(context, StatusCodes.Status400BadRequest, ex.Message);
+            }
+            catch (TooManyRequestsException ex)
+            {
+                await WriteProblem(context, StatusCodes.Status429TooManyRequests, ex.Message);
+            }
+
             catch (NotFoundException ex)
             {
                 await WriteProblem(context, StatusCodes.Status404NotFound, ex.Message);

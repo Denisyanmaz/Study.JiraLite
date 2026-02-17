@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using JiraLite.Application.DTOs;
+using JiraLite.Application.DTOs.ProjectMember;
 using JiraLite.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Net;

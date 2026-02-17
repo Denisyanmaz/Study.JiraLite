@@ -1,5 +1,8 @@
 ﻿using JiraLite.Application.DTOs;
 using JiraLite.Application.DTOs.Common;
+using JiraLite.Application.DTOs.Project;
+using JiraLite.Application.DTOs.ProjectMember;
+using JiraLite.Application.DTOs.Task;
 using JiraLite.Domain.Entities;
 using JiraLite.Domain.Enums;
 using Microsoft.AspNetCore.Html;

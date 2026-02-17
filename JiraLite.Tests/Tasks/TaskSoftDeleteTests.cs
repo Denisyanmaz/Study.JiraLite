@@ -1,6 +1,7 @@
 ﻿using FluentAssertions;
 using JiraLite.Application.DTOs;
 using JiraLite.Application.DTOs.Common;
+using JiraLite.Application.DTOs.Task;
 using JiraLite.Domain.Entities;
 using JiraLite.Domain.Enums;
 using JiraLite.Tests.Integration;

@@ -1,4 +1,4 @@
-﻿namespace JiraLite.Application.DTOs
+﻿namespace JiraLite.Application.DTOs.Project
 {
     public class ProjectDto
     {

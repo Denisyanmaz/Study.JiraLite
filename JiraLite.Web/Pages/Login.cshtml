@@ -7,17 +7,21 @@
 {
     <div style="color:red">@Model.Error</div>
 }
+@if (!string.IsNullOrWhiteSpace(Model.Success))
+{
+    <div class="alert alert-success">@Model.Success</div>
+}
 
 <form method="post">
     <div>
         <label>Email</label><br />
-        <input asp-for="Input.Email" />
+        <input asp-for="Input.Email" class="form-control" />
         <span asp-validation-for="Input.Email" style="color:red"></span>
     </div>
 
     <div style="margin-top:10px">
         <label>Password</label><br />
-        <input asp-for="Input.Password" type="password" />
+        <input asp-for="Input.Password" class="form-control" type="password" />
         <span asp-validation-for="Input.Password" style="color:red"></span>
     </div>
 

@@ -3,7 +3,7 @@ using JiraLite.Domain.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
-namespace JiraLite.Application.DTOs
+namespace JiraLite.Application.DTOs.Task
 {
     public class TaskItemDto
     {

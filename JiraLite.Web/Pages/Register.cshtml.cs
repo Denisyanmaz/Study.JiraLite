@@ -1,4 +1,4 @@
-using JiraLite.Application.DTOs;
+using JiraLite.Application.DTOs.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.ComponentModel.DataAnnotations;
@@ -44,49 +44,9 @@ namespace JiraLite.Web.Pages
                 Error = $"Register failed: {(int)registerResp.StatusCode} {registerResp.ReasonPhrase}\n{body}";
                 return Page();
             }
+            // ✅ After register, go to verification page
+            return RedirectToPage("/VerifyEmail", new { email = Input.Email });
 
-            // 2) Auto-login after register (since register result shape may vary)
-            var loginPayload = new LoginUserDto
-            {
-                Email = Input.Email,
-                Password = Input.Password
-            };
-
-            var loginResp = await client.PostAsJsonAsync("/api/auth/login", loginPayload);
-
-            if (!loginResp.IsSuccessStatusCode)
-            {
-                // Register ok but login failed => send them to login screen
-                return RedirectToPage("/Login");
-            }
-
-            var auth = await loginResp.Content.ReadFromJsonAsync<AuthResponseDto>();
-            if (auth == null || string.IsNullOrWhiteSpace(auth.Token))
-            {
-                return RedirectToPage("/Login");
-            }
-
-            // Store JWT cookie (same style as Login)
-            Response.Cookies.Append(
-                "jiralite_jwt",
-                auth.Token,
-                new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = Request.IsHttps,
-                    SameSite = SameSiteMode.Lax,
-                    Expires = DateTimeOffset.UtcNow.AddHours(4)
-                });
-
-            Response.Cookies.Append("jiralite_email", auth.Email, new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Lax,
-                Expires = DateTimeOffset.UtcNow.AddHours(4)
-            });
-
-            return RedirectToPage("/Projects/Index");
         }
 
         public class RegisterInput

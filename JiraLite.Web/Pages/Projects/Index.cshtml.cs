@@ -1,4 +1,4 @@
-using JiraLite.Application.DTOs;
+using JiraLite.Application.DTOs.Project;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Net;
 using System.Net.Http.Json;

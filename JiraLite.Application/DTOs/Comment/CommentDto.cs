@@ -1,4 +1,4 @@
-﻿namespace JiraLite.Application.DTOs
+﻿namespace JiraLite.Application.DTOs.Comment
 {
     public class CommentDto
     {

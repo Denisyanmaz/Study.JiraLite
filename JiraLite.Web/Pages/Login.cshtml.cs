@@ -1,4 +1,5 @@
-﻿using JiraLite.Application.DTOs;
+﻿using JiraLite.Application.DTOs.Auth;
+using JiraLite.Web.Helpers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -19,10 +20,17 @@ namespace JiraLite.Web.Pages
 
         [BindProperty]
         public LoginInput Input { get; set; } = new();
-
+        public string? Success { get; set; }
         public string? Error { get; set; }
 
-        public void OnGet() { }
+        public void OnGet(string? email = null, bool verified = false)
+        {
+            if (!string.IsNullOrWhiteSpace(email))
+                Input.Email = email;
+
+            if (verified)
+                Success = "Email verified successfully. You can now log in.";
+        }
 
         public async Task<IActionResult> OnPostAsync()
         {
@@ -42,8 +50,15 @@ namespace JiraLite.Web.Pages
 
             if (!resp.IsSuccessStatusCode)
             {
-                var body = await resp.Content.ReadAsStringAsync();
-                Error = $"Login failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                var msg = await ApiErrorReader.ReadFriendlyMessageAsync(resp);
+
+                if ((int)resp.StatusCode == 403 &&
+                    msg.Contains("not verified", StringComparison.OrdinalIgnoreCase))
+                {
+                    return RedirectToPage("/VerifyEmail", new { email = Input.Email });
+                }
+
+                Error = msg;
                 return Page();
             }
 

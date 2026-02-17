@@ -1,0 +1,44 @@
+﻿@page
+@model JiraLite.Web.Pages.VerifyEmailModel
+@{
+    ViewData["Title"] = "Verify Email";
+}
+
+<h1>Verify your email</h1>
+<p>We sent a 6-digit code to your email. Enter it below.</p>
+
+@if (!string.IsNullOrWhiteSpace(Model.Success))
+{
+    <div class="alert alert-success">@Model.Success</div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div class="alert alert-danger">@Model.Error</div>
+}
+
+<!-- ✅ Verify form -->
+<form method="post" asp-page-handler="" class="mb-3">
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input class="form-control" asp-for="Input.Email" />
+        <span class="text-danger" asp-validation-for="Input.Email"></span>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Verification code</label>
+        <input class="form-control" asp-for="Input.Code" autocomplete="one-time-code" inputmode="numeric" />
+        <span class="text-danger" asp-validation-for="Input.Code"></span>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Verify</button>
+</form>
+
+<!-- ✅ Resend form (no Code field, so no Code validation) -->
+<form method="post" asp-page-handler="Resend">
+    <input type="hidden" asp-for="Input.Email" />
+    <button type="submit" class="btn btn-outline-secondary">Resend code</button>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -1,4 +1,4 @@
-﻿using JiraLite.Application.DTOs;
+﻿using JiraLite.Application.DTOs.Comment;
 using JiraLite.Application.Exceptions;
 using JiraLite.Application.Interfaces;
 using JiraLite.Domain.Entities;

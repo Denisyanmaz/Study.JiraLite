@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace JiraLite.Application.DTOs
+namespace JiraLite.Application.DTOs.ProjectMember
 {
     public class ProjectMemberDto
     {

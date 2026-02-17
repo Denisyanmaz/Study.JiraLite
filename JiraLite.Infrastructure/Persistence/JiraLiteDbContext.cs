@@ -24,6 +24,8 @@ namespace JiraLite.Infrastructure.Persistence
         public DbSet<TaskItem> Tasks => Set<TaskItem>();
         public DbSet<TaskComment> Comments => Set<TaskComment>();
         public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+        public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
+
 
         public override int SaveChanges()
         {
@@ -60,7 +62,45 @@ namespace JiraLite.Infrastructure.Persistence
 
                 entity.Property(u => u.IsActive)
                       .HasDefaultValue(true);
+                entity.Property(u => u.IsEmailVerified)
+                      .HasDefaultValue(false);
+
             });
+            // ----------------------------
+            // Email Verifications
+            // ----------------------------
+            modelBuilder.Entity<EmailVerification>(entity =>
+            {
+                entity.Property(v => v.CodeHash)
+                      .IsRequired()
+                      .HasMaxLength(200);
+
+                entity.Property(v => v.ExpiresAt)
+                      .IsRequired();
+
+                entity.Property(v => v.LastSentAt)
+                      .IsRequired();
+
+                entity.Property(v => v.SendCount)
+                      .HasDefaultValue(1);
+
+                entity.Property(v => v.Attempts)
+                      .HasDefaultValue(0);
+
+                entity.Property(v => v.IsUsed)
+                      .HasDefaultValue(false);
+
+                entity.HasIndex(v => v.UserId)
+                      .IsUnique(); // ✅ one active record per user (we overwrite on resend)
+
+                entity.HasOne(v => v.User)
+                      .WithMany() // User has no navigation collection
+                      .HasForeignKey(v => v.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(v => v.ExpiresAt);
+            });
+
 
             // ----------------------------
             // Projects

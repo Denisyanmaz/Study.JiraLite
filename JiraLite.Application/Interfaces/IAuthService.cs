@@ -1,4 +1,4 @@
-﻿using JiraLite.Application.DTOs;
+﻿using JiraLite.Application.DTOs.Auth;
 
 namespace JiraLite.Application.Interfaces
 {
@@ -6,5 +6,8 @@ namespace JiraLite.Application.Interfaces
     {
         Task<AuthResponseDto> RegisterAsync(RegisterUserDto dto);
         Task<AuthResponseDto> LoginAsync(LoginUserDto dto);
+        Task VerifyEmailAsync(string email, string code);
+        Task ResendVerificationAsync(string email);
+
     }
 }
