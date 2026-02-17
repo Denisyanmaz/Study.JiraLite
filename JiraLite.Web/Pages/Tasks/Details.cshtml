@@ -105,14 +105,11 @@ else
 
                 <div class="row g-3 mt-1">
                     <div class="col-md-6">
-                        <label class="text-muted small mb-1">AssigneeId (GUID)</label>
-                        <select id="assigneeId" class="form-select">
-                            @foreach (var opt in Model.AssigneeSelectItems)
-                            {
-                                <option value="@opt.Value" selected="@(opt.Value == (Model.Task?.AssigneeId.ToString() ?? ""))">
-                                    @opt.Text
-                                </option>
-                            }
+                        <label class="text-muted small mb-1">Assignee</label>
+                        <select id="assigneeId"
+                                class="form-select"
+                                asp-for="Task.AssigneeId"
+                                asp-items="Model.AssigneeSelectItems">
                         </select>
                     </div>
 
@@ -185,37 +182,44 @@ else
                 };
             }
             async function saveFullUpdate() {
-                try {
-                    setSaving(true);
+              try {
+                setSaving(true);
 
-                    const payload = buildPutPayload();
-                    const assignee = document.getElementById("assigneeId").value;
+                const payload = buildPutPayload();
+                const assignee = document.getElementById("assigneeId").value;
 
-                    if (!assignee) {
-                        showToast("AssigneeId is required.", false);
-                        return;
-                    }
-
-                    const res = await fetch(`?handler=Update&id=${serverTask.id}&tab=overview`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify(payload)
-                    });
-
-                    if (!res.ok) {
-                        const txt = await res.text();
-                        showToast(`Save failed: ${res.status} ${txt}`, false);
-                        return;
-                    }
-
-                    showToast("Saved.");
-                } catch (e) {
-                    showToast(`Save error: ${e}`, false);
-                } finally {
-                    setSaving(false);
+                if (!assignee) {
+                  showToast("AssigneeId is required.", false);
+                  return;
                 }
+
+                const res = await fetch(`?handler=SaveFullUpdate&id=${serverTask.id}&tab=overview`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                  const txt = await res.text();
+                  showToast(`Save failed: ${res.status} ${txt}`, false);
+                  return;
+                }
+
+                const data = await res.json();
+                if (data?.redirectUrl) {
+                  window.location.href = data.redirectUrl;
+                  return;
+                }
+
+                showToast("Saved.");
+              } catch (e) {
+                showToast(`Save error: ${e}`, false);
+              } finally {
+                setSaving(false);
+              }
             }
+
 
             async function saveStatus() {
                 try {

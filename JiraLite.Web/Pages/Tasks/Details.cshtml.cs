@@ -29,71 +29,41 @@ namespace JiraLite.Web.Pages.Tasks
             _httpClientFactory = httpClientFactory;
         }
 
+        // -------------------- Route / Query --------------------
         [FromRoute(Name = "id")]
         public Guid Id { get; set; } // taskId
 
         [FromQuery(Name = "tab")]
         public string Tab { get; set; } = "overview"; // overview | comments | activity
 
+        // -------------------- View Data --------------------
         public TaskItem? Task { get; private set; }
         public string? Error { get; private set; }
+
+        // Assignee dropdown (email text, guid value)
+        public Dictionary<Guid, string?> AssigneeEmailById { get; private set; } = new();
+        public List<SelectListItem> AssigneeSelectItems { get; private set; } = new();
+        public string? AssigneesError { get; private set; } // optional debugging
 
         public List<TaskCommentDto> Comments { get; private set; } = new();
         public PagedResult<ActivityLogDto>? Activity { get; private set; }
 
-        // ----- Add Comment form -----
+        // -------------------- Add Comment --------------------
         [BindProperty]
         public AddCommentInputModel AddCommentInput { get; set; } = new();
 
         public string? CommentError { get; private set; }
 
-        public async Task<IActionResult> OnGetAsync()
-            => await LoadAsync();
-        private async Task LoadAssigneesAsync(HttpClient client)
-        {
-            AssigneeSelectItems = new List<SelectListItem>();
+        // ============================================================
+        // GET
+        // ============================================================
+        public async Task<IActionResult> OnGetAsync() => await LoadAsync();
 
-            if (Task == null || Task.ProjectId == Guid.Empty)
-                return;
-
-            try
-            {
-                var resp = await client.GetAsync($"/api/projects/{Task.ProjectId}/members");
-                if (!resp.IsSuccessStatusCode)
-                {
-                    var body = await resp.Content.ReadAsStringAsync();
-                    AssigneesError = $"Assignees load failed: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
-                    return;
-                }
-
-                var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
-
-                // Owner first then by UserId (nice UX)
-                var ordered = members
-                    .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
-                    .ThenBy(m => m.UserId);
-
-                foreach (var m in ordered)
-                {
-                    AssigneeSelectItems.Add(new SelectListItem
-                    {
-                        Value = m.UserId.ToString(),
-                        Text = $"{m.UserId} ({m.Role})"
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                AssigneesError = $"Assignees load exception: {ex.Message}";
-            }
-        }
-
-        public List<SelectListItem> AssigneeSelectItems { get; private set; } = new();
-        public string? AssigneesError { get; private set; } // optional, for debugging UI
-
+        // ============================================================
+        // POST: Add Comment
+        // ============================================================
         public async Task<IActionResult> OnPostAddCommentAsync()
         {
-            // Always stay on comments tab for this POST
             Tab = "comments";
 
             if (Id == Guid.Empty)
@@ -102,11 +72,9 @@ namespace JiraLite.Web.Pages.Tasks
                 return Page();
             }
 
-            // If model binding/validation fails, show why
             if (!ModelState.IsValid)
             {
                 CommentError = BuildModelStateError(ModelState);
-
                 await LoadAsync(loadTask: true, loadComments: true, loadActivity: false);
                 return Page();
             }
@@ -132,15 +100,13 @@ namespace JiraLite.Web.Pages.Tasks
                 return Page();
             }
 
-            // PRG pattern (Prevents duplicate post on refresh)
             return Redirect($"/Tasks/Details/{Id}?tab=comments");
         }
 
-        // ============================
-        // NEW: Inline update handlers
-        // ============================
-
+        // ============================================================
+        // POST: Inline Update (full task dto)
         // Called by JS: POST ?handler=Update
+        // ============================================================
         public async Task<IActionResult> OnPostUpdateAsync()
         {
             Tab = "overview";
@@ -148,15 +114,12 @@ namespace JiraLite.Web.Pages.Tasks
             if (Id == Guid.Empty)
                 return BadRequest("Invalid task id.");
 
-            // Read TaskItemDto JSON from request body
             var dto = await Request.ReadFromJsonAsync<TaskItemDto>(_jsonOptions);
-
             if (dto == null)
                 return BadRequest("Missing body.");
 
             var client = _httpClientFactory.CreateClient("JiraLiteApi");
 
-            // Forward to API
             var resp = await client.PutAsJsonAsync($"/api/tasks/{Id}", dto);
 
             if (resp.StatusCode == HttpStatusCode.Unauthorized)
@@ -170,8 +133,37 @@ namespace JiraLite.Web.Pages.Tasks
 
             return new JsonResult(new { ok = true });
         }
+        public async Task<IActionResult> OnPostSaveFullUpdateAsync()
+        {
+            if (Id == Guid.Empty)
+                return BadRequest("Invalid task id.");
 
+            var dto = await Request.ReadFromJsonAsync<TaskItemDto>(_jsonOptions);
+            if (dto == null)
+                return BadRequest("Missing body.");
+
+            var client = _httpClientFactory.CreateClient("JiraLiteApi");
+
+            var resp = await client.PutAsJsonAsync($"/api/tasks/{Id}", dto);
+
+            if (resp.StatusCode == HttpStatusCode.Unauthorized)
+                return RedirectToPage("/Login");
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                return StatusCode((int)resp.StatusCode, body);
+            }
+
+            return new JsonResult(new { redirectUrl = $"/Projects/Details/{dto.ProjectId}?tab=board" });
+        }
+
+
+
+        // ============================================================
+        // POST: Inline Status Update
         // Called by JS: POST ?handler=UpdateStatus
+        // ============================================================
         public async Task<IActionResult> OnPostUpdateStatusAsync()
         {
             Tab = "overview";
@@ -180,15 +172,11 @@ namespace JiraLite.Web.Pages.Tasks
                 return BadRequest("Invalid task id.");
 
             var dto = await Request.ReadFromJsonAsync<UpdateTaskStatusDto>(_jsonOptions);
-
-
             if (dto == null)
                 return BadRequest("Missing body.");
 
             var client = _httpClientFactory.CreateClient("JiraLiteApi");
 
-            // PatchAsJsonAsync isn't always available depending on target/framework,
-            // so we do a manual PATCH request safely:
             var req = new HttpRequestMessage(HttpMethod.Patch, $"/api/tasks/{Id}/status")
             {
                 Content = JsonContent.Create(dto)
@@ -208,6 +196,9 @@ namespace JiraLite.Web.Pages.Tasks
             return new JsonResult(new { ok = true });
         }
 
+        // ============================================================
+        // Loader
+        // ============================================================
         private async Task<IActionResult> LoadAsync(
             bool loadTask = true,
             bool loadComments = true,
@@ -225,6 +216,7 @@ namespace JiraLite.Web.Pages.Tasks
             if (loadTask)
             {
                 var taskResp = await client.GetAsync($"/api/tasks/{Id}");
+
                 if (taskResp.StatusCode == HttpStatusCode.Unauthorized)
                     return RedirectToPage("/Login");
 
@@ -241,13 +233,16 @@ namespace JiraLite.Web.Pages.Tasks
                     Error = "Task not found.";
                     return Page();
                 }
-                await LoadAssigneesAsync(client);
+
+                // ✅ important: only after Task is loaded
+                await LoadAssigneesAsync(client, Task.ProjectId);
             }
 
-            // 2) Comments (load on comments tab)
-            if (loadComments && Tab == "comments")
+            // 2) Comments (only on comments tab)
+            if (loadComments && string.Equals(Tab, "comments", StringComparison.OrdinalIgnoreCase))
             {
                 var cResp = await client.GetAsync($"/api/comments/task/{Id}");
+
                 if (cResp.StatusCode == HttpStatusCode.Unauthorized)
                     return RedirectToPage("/Login");
 
@@ -257,16 +252,16 @@ namespace JiraLite.Web.Pages.Tasks
                 }
                 else
                 {
-                    // if comments endpoint fails, show it (optional)
                     var body = await cResp.Content.ReadAsStringAsync();
                     CommentError ??= $"API error (comments): {(int)cResp.StatusCode} {cResp.ReasonPhrase}\n{body}";
                 }
             }
 
-            // 3) Activity (paged)
-            if (loadActivity && Tab == "activity")
+            // 3) Activity (only on activity tab)
+            if (loadActivity && string.Equals(Tab, "activity", StringComparison.OrdinalIgnoreCase))
             {
                 var aResp = await client.GetAsync($"/api/activity/task/{Id}?page=1&pageSize=50");
+
                 if (aResp.StatusCode == HttpStatusCode.Unauthorized)
                     return RedirectToPage("/Login");
 
@@ -279,17 +274,59 @@ namespace JiraLite.Web.Pages.Tasks
             return Page();
         }
 
+        // ============================================================
+        // Assignees loader (members -> dropdown)
+        // ============================================================
+        private async Task LoadAssigneesAsync(HttpClient client, Guid projectId)
+        {
+            AssigneeSelectItems = new List<SelectListItem>();
+            AssigneeEmailById = new Dictionary<Guid, string?>();
+
+            try
+            {
+                var resp = await client.GetAsync($"/api/projects/{projectId}/members");
+                if (!resp.IsSuccessStatusCode)
+                {
+                    AssigneesError = $"Could not load members for assignees. Status: {(int)resp.StatusCode}";
+                    return;
+                }
+
+                var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+                var ordered = members
+                    .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
+                    .ThenBy(m => m.Email ?? m.UserId.ToString());
+
+                foreach (var m in ordered)
+                {
+                    AssigneeEmailById[m.UserId] = m.Email;
+
+                    var label = string.IsNullOrWhiteSpace(m.Email)
+                        ? $"{m.UserId} ({m.Role})"
+                        : $"{m.Email} ({m.Role})";
+
+                    AssigneeSelectItems.Add(new SelectListItem
+                    {
+                        Value = m.UserId.ToString(), // GUID
+                        Text = label                // Email (Role)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                // optional debug
+                AssigneesError = ex.Message;
+            }
+        }
+
         private static string BuildModelStateError(ModelStateDictionary modelState)
         {
             var sb = new StringBuilder();
             foreach (var kvp in modelState)
             {
                 foreach (var err in kvp.Value.Errors)
-                {
                     sb.AppendLine($"{kvp.Key}: {err.ErrorMessage}");
-                }
             }
-
             return sb.Length == 0 ? "ModelState invalid (unknown reason)." : sb.ToString();
         }
 
