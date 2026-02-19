@@ -1,0 +1,6 @@
+@DenoLite.Api_HostAddress = http://localhost:5036
+
+GET {{DenoLite.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

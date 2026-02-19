@@ -1,8 +1,0 @@
-<Solution>
-  <Project Path="JiraLite.Api/JiraLite.Api.csproj" />
-  <Project Path="JiraLite.Application/JiraLite.Application.csproj" />
-  <Project Path="JiraLite.Domain/JiraLite.Domain.csproj" />
-  <Project Path="JiraLite.Infrastructure/JiraLite.Infrastructure.csproj" />
-  <Project Path="JiraLite.Tests/JiraLite.Tests.csproj" />
-  <Project Path="JiraLite.Web/JiraLite.Web.csproj" Id="ab1782e6-f93f-45ae-a22c-61c796ce6d98" />
-</Solution>

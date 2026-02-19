@@ -1,0 +1,47 @@
+@page
+@model DenoLite.Web.Pages.Projects.IndexModel
+
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>My Projects</h2>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div style="color:red; white-space:pre-wrap; margin-top:10px;">
+        @Model.Error
+    </div>
+}
+
+@if (Model.Projects.Count == 0 && string.IsNullOrWhiteSpace(Model.Error))
+{
+    <p>No projects yet.</p>
+}
+else if (Model.Projects.Count > 0)
+{
+    <table border="1" cellpadding="8" cellspacing="0" style="margin-top:10px;">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>OwnerId</th>
+                <th>Id</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Model.Projects)
+            {
+                <tr>
+                    <td>
+                        <a href="/Projects/Details/@p.Id">
+                            @p.Name
+                        </a>
+                    </td>
+
+                    <td>@(p.Description ?? "-")</td>
+                    <td><code>@p.OwnerId</code></td>
+                    <td><code>@p.Id</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

@@ -1,0 +1,37 @@
+@page
+@model DenoLite.Web.Pages.Projects.CreateModel
+
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2>Create Project</h2>
+    <div>
+        <a href="/Projects">Back</a> |
+        <a href="/Logout">Logout</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div style="color:red; white-space:pre-wrap;">@Model.Error</div>
+}
+
+<form method="post">
+    <div style="margin-top:10px">
+        <label>Name</label><br />
+        <input asp-for="Input.Name" />
+        <span asp-validation-for="Input.Name" style="color:red"></span>
+    </div>
+
+    <div style="margin-top:10px">
+        <label>Description</label><br />
+        <textarea asp-for="Input.Description" rows="4" cols="60"></textarea>
+        <span asp-validation-for="Input.Description" style="color:red"></span>
+    </div>
+
+    <div style="margin-top:15px">
+        <button type="submit">Create</button>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

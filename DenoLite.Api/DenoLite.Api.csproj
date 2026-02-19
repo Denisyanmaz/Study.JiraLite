@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	  <UserSecretsId>5ecf228e-0459-4c5b-8ee8-2c7945c0752f</UserSecretsId>
+  </PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="dotenv.net" Version="4.0.0" />
+		<PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.3" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+		<PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
+	</ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\DenoLite.Application\DenoLite.Application.csproj" />
+		<ProjectReference Include="..\DenoLite.Infrastructure\DenoLite.Infrastructure.csproj" />
+	</ItemGroup>
+</Project>

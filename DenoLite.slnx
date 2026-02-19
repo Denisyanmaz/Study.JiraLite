@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="DenoLite.Api/DenoLite.Api.csproj" />
+  <Project Path="DenoLite.Application/DenoLite.Application.csproj" />
+  <Project Path="DenoLite.Domain/DenoLite.Domain.csproj" />
+  <Project Path="DenoLite.Infrastructure/DenoLite.Infrastructure.csproj" />
+  <Project Path="DenoLite.Tests/DenoLite.Tests.csproj" />
+  <Project Path="DenoLite.Web/DenoLite.Web.csproj" Id="ab1782e6-f93f-45ae-a22c-61c796ce6d98" />
+</Solution>

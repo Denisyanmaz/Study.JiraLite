@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - DenoLite.Web</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/DenoLite.Web.styles.css" asp-append-version="true" />
+</head>
+<body>
+    @{
+        // ✅ You are using JWT stored in a cookie (not ASP.NET cookie auth sign-in),
+        // so User.Identity.IsAuthenticated will NOT reflect login state.
+        var hasJwt = Context.Request.Cookies.ContainsKey("DenoLite_jwt")
+        && !string.IsNullOrWhiteSpace(Context.Request.Cookies["DenoLite_jwt"]);
+    }
+    <header>
+        @{
+            var isHome = string.Equals(ViewContext?.HttpContext?.Request?.Path.Value, "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow @(isHome ? "" : "mb-3")">
+            <div class="container">
+                <a class="navbar-brand" asp-area="" asp-page="/Index">DenoLite.Web</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse"
+                        aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1">
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-page="/Index">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-page="/Privacy">Privacy</a>
+                        </li>
+
+                        @if (hasJwt)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Projects/Index">Projects</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Projects/Create">Create Project</a>
+                            </li>
+                        }
+                    </ul>
+
+                    <ul class="navbar-nav">
+                        @if (hasJwt)
+                        {
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle p-0" href="#" id="profileDropdown" role="button" 
+                                   data-bs-toggle="dropdown" aria-expanded="false">
+                                    <div class="rounded-circle bg-secondary d-inline-flex align-items-center justify-content-center" 
+                                         style="width: 40px; height: 40px; color: white; font-weight: 500;">
+                                        <span>U</span>
+                                    </div>
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
+                                    <li>
+                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changePasswordModal">
+                                            <i class="me-2">🔒</i> Change Password
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#changeEmailModal">
+                                            <i class="me-2">✉️</i> Change Email
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form method="post" asp-page="/Logout" class="d-inline w-100">
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="me-2">🚪</i> Logout
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Login">Login</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-dark" asp-area="" asp-page="/Register">Register</a>
+                            </li>
+                        }
+                    </ul>
+
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    @if (isHome)
+    {
+        <main role="main">
+            @RenderBody()
+        </main>
+    }
+    else
+    {
+        <div class="container">
+            <main role="main" class="pb-3">
+                @RenderBody()
+            </main>
+        </div>
+    }
+
+
+    <footer class="border-top footer text-muted">
+        <div class="container">
+            &copy; 2026 - DenoLite.Web - <a asp-area="" asp-page="/Privacy">Privacy</a>
+        </div>
+    </footer>
+
+    @* Change Password Modal *@
+    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="changePasswordAlert" class="alert d-none" role="alert"></div>
+                    
+                    <form id="changePasswordForm">
+                        <div class="mb-3">
+                            <label for="oldPassword" class="form-label">Current Password</label>
+                            <input type="password" class="form-control" id="oldPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">New Password</label>
+                            <input type="password" class="form-control" id="newPassword" required minlength="6">
+                            <div class="form-text">Minimum 6 characters</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                            <input type="password" class="form-control" id="confirmPassword" required minlength="6">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnChangePassword">Change Password</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Change Email Modal *@
+    <div class="modal fade" id="changeEmailModal" tabindex="-1" aria-labelledby="changeEmailModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="changeEmailModalLabel">Change Email</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="changeEmailAlert" class="alert d-none" role="alert"></div>
+                    
+                    <div id="emailStep1" class="email-step">
+                        <form id="changeEmailForm">
+                            <div class="mb-3">
+                                <label for="emailPassword" class="form-label">Current Password</label>
+                                <input type="password" class="form-control" id="emailPassword" required>
+                                <div class="form-text">For security verification</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="newEmail" class="form-label">New Email Address</label>
+                                <input type="email" class="form-control" id="newEmail" required>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="emailStep2" class="email-step d-none">
+                        <p class="text-success mb-3">✓ Verification code sent to your new email address</p>
+                        <p class="text-info mb-3">⚠️ A notification has been sent to your old email address</p>
+                        <form id="verifyEmailForm">
+                            <div class="mb-3">
+                                <label for="emailOtp" class="form-label">Enter 6-digit code</label>
+                                <input type="text" class="form-control text-center" id="emailOtp" required 
+                                       maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+                                <div class="form-text">Check your new email inbox</div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnSendEmailCode">Send Code</button>
+                    <button type="button" class="btn btn-primary d-none" id="btnVerifyEmail">Verify & Change</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    <script>
+        // Change Password functionality
+        document.getElementById('btnChangePassword')?.addEventListener('click', async function() {
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const alertDiv = document.getElementById('changePasswordAlert');
+            const btn = this;
+
+            // Validation
+            if (!oldPassword || !newPassword || !confirmPassword) {
+                showPasswordAlert('Please fill in all fields.', false);
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showPasswordAlert('New passwords do not match.', false);
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                showPasswordAlert('Password must be at least 6 characters.', false);
+                return;
+            }
+
+            if (oldPassword === newPassword) {
+                showPasswordAlert('New password must be different from the current password.', false);
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Changing...';
+
+                const response = await fetch('/Account?handler=ChangePassword', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        OldPassword: oldPassword,
+                        NewPassword: newPassword
+                    })
+                });
+
+                if (response.ok) {
+                    showPasswordAlert('Password changed successfully!', true);
+                    document.getElementById('changePasswordForm').reset();
+                    setTimeout(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+                    }, 1500);
+                } else {
+                    const errorText = await response.text();
+                    showPasswordAlert(errorText || 'Failed to change password. Please check your current password.', false);
+                }
+            } catch (error) {
+                showPasswordAlert('An error occurred. Please try again.', false);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Change Password';
+            }
+        });
+
+        function showPasswordAlert(message, isSuccess) {
+            const alertDiv = document.getElementById('changePasswordAlert');
+            alertDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            alertDiv.classList.add(isSuccess ? 'alert-success' : 'alert-danger');
+            alertDiv.textContent = message;
+        }
+
+        // Clear form and alerts when modal is closed
+        document.getElementById('changePasswordModal')?.addEventListener('hidden.bs.modal', function() {
+            document.getElementById('changePasswordForm').reset();
+            document.getElementById('changePasswordAlert').classList.add('d-none');
+        });
+
+        // ============== Change Email Functionality ==============
+        let pendingNewEmail = '';
+
+        // Step 1: Send verification code
+        document.getElementById('btnSendEmailCode')?.addEventListener('click', async function() {
+            const password = document.getElementById('emailPassword').value;
+            const newEmail = document.getElementById('newEmail').value;
+            const btn = this;
+
+            if (!password || !newEmail) {
+                showEmailAlert('Please fill in all fields.', false);
+                return;
+            }
+
+            const emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+            if (!emailRegex.test(newEmail)) {
+                showEmailAlert('Please enter a valid email address.', false);
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Sending...';
+
+                const response = await fetch('/Account?handler=SendEmailChangeCode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        Password: password,
+                        NewEmail: newEmail
+                    })
+                });
+
+                if (response.ok) {
+                    pendingNewEmail = newEmail;
+                    showEmailAlert('Verification code sent! Check your new email inbox.', true);
+                    
+                    // Switch to step 2
+                    document.getElementById('emailStep1').classList.add('d-none');
+                    document.getElementById('emailStep2').classList.remove('d-none');
+                    document.getElementById('btnSendEmailCode').classList.add('d-none');
+                    document.getElementById('btnVerifyEmail').classList.remove('d-none');
+                } else {
+                    const errorText = await response.text();
+                    showEmailAlert(errorText || 'Failed to send code. Please check your password.', false);
+                }
+            } catch (error) {
+                showEmailAlert('An error occurred. Please try again.', false);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Code';
+            }
+        });
+
+        // Step 2: Verify code and change email
+        document.getElementById('btnVerifyEmail')?.addEventListener('click', async function() {
+            const code = document.getElementById('emailOtp').value;
+            const btn = this;
+
+            if (!code || code.length !== 6) {
+                showEmailAlert('Please enter a valid 6-digit code.', false);
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Verifying...';
+
+                const response = await fetch('/Account?handler=VerifyAndChangeEmail', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        NewEmail: pendingNewEmail,
+                        Code: code
+                    })
+                });
+
+                if (response.ok) {
+                    showEmailAlert('Email changed successfully! You will be logged out.', true);
+                    setTimeout(() => {
+                        window.location.href = '/Logout';
+                    }, 2000);
+                } else {
+                    const errorText = await response.text();
+                    showEmailAlert(errorText || 'Invalid or expired code.', false);
+                }
+            } catch (error) {
+                showEmailAlert('An error occurred. Please try again.', false);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Verify & Change';
+            }
+        });
+
+        function showEmailAlert(message, isSuccess) {
+            const alertDiv = document.getElementById('changeEmailAlert');
+            alertDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            alertDiv.classList.add(isSuccess ? 'alert-success' : 'alert-danger');
+            alertDiv.textContent = message;
+        }
+
+        // Reset email modal when closed
+        document.getElementById('changeEmailModal')?.addEventListener('hidden.bs.modal', function() {
+            document.getElementById('changeEmailForm').reset();
+            document.getElementById('verifyEmailForm').reset();
+            document.getElementById('changeEmailAlert').classList.add('d-none');
+            document.getElementById('emailStep1').classList.remove('d-none');
+            document.getElementById('emailStep2').classList.add('d-none');
+            document.getElementById('btnSendEmailCode').classList.remove('d-none');
+            document.getElementById('btnVerifyEmail').classList.add('d-none');
+            pendingNewEmail = '';
+        });
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
