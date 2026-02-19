@@ -333,6 +333,8 @@ namespace DenoLite.Web.Pages.Projects
             else if (string.Equals(Tab, "activity", StringComparison.OrdinalIgnoreCase))
             {
                 Tab = "activity";
+                // Load members first to populate AssigneeEmailById with current members
+                await LoadAssigneeSelectItemsAsync(client);
                 await LoadActivityAsync(client);
             }
             else
@@ -412,6 +414,68 @@ namespace DenoLite.Web.Pages.Projects
             }
 
             ProjectActivity = await resp.Content.ReadFromJsonAsync<PagedResult<ActivityLogDto>>();
+
+            // Load actor emails for all actors in activity logs
+            if (ProjectActivity?.Items != null && ProjectActivity.Items.Count > 0)
+            {
+                var actorIds = ProjectActivity.Items.Select(a => a.ActorId).Distinct().ToList();
+                await LoadActorEmailsAsync(client, actorIds);
+            }
+        }
+
+        private async Task LoadActorEmailsAsync(HttpClient client, List<Guid> actorIds)
+        {
+            // First, load all members (including removed ones for owners) - this covers most actors
+            try
+            {
+                var membersResp = await client.GetAsync($"/api/projects/{ProjectId}/members");
+                if (membersResp.IsSuccessStatusCode)
+                {
+                    var members = await membersResp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+                    foreach (var member in members)
+                    {
+                        if (!string.IsNullOrWhiteSpace(member.Email))
+                        {
+                            AssigneeEmailById[member.UserId] = member.Email;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors
+            }
+
+            // For any remaining actor IDs, try to extract email from activity log messages
+            foreach (var actorId in actorIds)
+            {
+                if (AssigneeEmailById.ContainsKey(actorId))
+                    continue; // Already loaded
+
+                // Try to extract email from activity messages
+                if (ProjectActivity?.Items != null)
+                {
+                    var actorActivities = ProjectActivity.Items.Where(a => a.ActorId == actorId).ToList();
+                    foreach (var activity in actorActivities)
+                    {
+                        // Extract email from messages like "Member added: email@example.com (UserId: ...)"
+                        var emailMatch = System.Text.RegularExpressions.Regex.Match(
+                            activity.Message ?? "",
+                            @"(?:Member\s+(?:added|removed|left):\s*)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                        if (emailMatch.Success && emailMatch.Groups.Count > 1)
+                        {
+                            var email = emailMatch.Groups[1].Value;
+                            if (!string.IsNullOrWhiteSpace(email))
+                            {
+                                AssigneeEmailById[actorId] = email;
+                                break; // Found email, move to next actor
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private async Task LoadMembersAsync(HttpClient client)
@@ -477,6 +541,9 @@ namespace DenoLite.Web.Pages.Projects
                 if (!resp.IsSuccessStatusCode) return;
 
                 var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+                // Only allow assigning to ACTIVE members
+                members = members.Where(m => !m.IsRemoved).ToList();
 
                 // Owner first, then members
                 var ordered = members
@@ -569,6 +636,27 @@ namespace DenoLite.Web.Pages.Projects
 
         public string TabLink(string tab)
             => $"/Projects/Details/{ProjectId}?tab={tab}";
+
+        // Helper to clean User IDs from old activity log messages
+        private string CleanActivityMessage(string message, string actionType)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return message;
+
+            // Remove User ID patterns from member-related actions
+            if (actionType == "MemberAdded" || actionType == "MemberRemoved" || actionType == "MemberLeft")
+            {
+                // Remove patterns like "(UserId: guid)" or "(Userid: guid)" or "(Userld: guid)" (case insensitive, handles typos)
+                // Matches: User followed by any characters, then : or space, then GUID in parentheses
+                message = System.Text.RegularExpressions.Regex.Replace(
+                    message,
+                    @"\s*\(User[^:)]*[:\s]+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\)",
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+
+            return message.Trim();
+        }
 
         // ✅ RenderColumn (kept exactly as your version)
         public IHtmlContent RenderColumn(string status, List<TaskItem> items)

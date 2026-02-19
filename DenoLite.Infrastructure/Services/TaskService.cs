@@ -31,6 +31,13 @@ namespace DenoLite.Infrastructure.Services
             if (!isMember)
                 throw new ForbiddenException("Only project members can create tasks.");
 
+            // Assignee must be an ACTIVE member of the project
+            var assigneeIsMember = await _context.ProjectMembers
+                .AnyAsync(pm => pm.ProjectId == dto.ProjectId && pm.UserId == dto.AssigneeId);
+
+            if (!assigneeIsMember)
+                throw new BadRequestException("Assignee must be a current project member.");
+
             var task = new TaskItem
             {
                 Title = dto.Title,
@@ -100,6 +107,13 @@ namespace DenoLite.Infrastructure.Services
 
             if (task.AssigneeId != currentUserId && project.OwnerId != currentUserId)
                 throw new ForbiddenException("Only the assignee or project owner can update this task.");
+
+            // Assignee must be an ACTIVE member of the project
+            var assigneeIsMember = await _context.ProjectMembers
+                .AnyAsync(pm => pm.ProjectId == task.ProjectId && pm.UserId == dto.AssigneeId);
+
+            if (!assigneeIsMember)
+                throw new BadRequestException("Assignee must be a current project member.");
 
             // ✅ snapshot (before)
             var beforeTitle = task.Title;

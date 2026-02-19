@@ -307,11 +307,11 @@
                             <div class="d-flex justify-content-between">
                                 <div>
                                     <span class="badge bg-secondary">@a.ActionType</span>
-                                    <span class="text-muted small">by <code>@a.ActorId</code></span>
+                                    <span class="text-muted small">by <code>@(Model.AssigneeEmailById.TryGetValue(a.ActorId, out var actorEmail) && !string.IsNullOrWhiteSpace(actorEmail) ? actorEmail : a.ActorId.ToString())</code></span>
                                 </div>
                                 <div class="text-muted small">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
                             </div>
-                            <div class="mt-2">@a.Message</div>
+                            <div class="mt-2">@CleanActivityMessage(a.Message, a.ActionType)</div>
                         </div>
                     }
                 }

@@ -288,6 +288,9 @@ else
                             <option value="TaskDeleted" selected="@(Model.ActivityActionType == "TaskDeleted")">TaskDeleted</option>
                             <option value="TaskStatusChanged" selected="@(Model.ActivityActionType == "TaskStatusChanged")">TaskStatusChanged</option>
                             <option value="CommentAdded" selected="@(Model.ActivityActionType == "CommentAdded")">CommentAdded</option>
+                            <option value="MemberAdded" selected="@(Model.ActivityActionType == "MemberAdded")">MemberAdded</option>
+                            <option value="MemberRemoved" selected="@(Model.ActivityActionType == "MemberRemoved")">MemberRemoved</option>
+                            <option value="MemberLeft" selected="@(Model.ActivityActionType == "MemberLeft")">MemberLeft</option>
                         </select>
                     </div>
 
@@ -365,7 +368,7 @@ else
                                 </div>
                                 <div class="text-muted small">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
                             </div>
-                            <div class="mt-2">@a.Message</div>
+                            <div class="mt-2">@Model.CleanActivityMessage(a.Message, a.ActionType)</div>
                         </div>
                     }
                 }
@@ -411,59 +414,99 @@ else
                     </div>
                 }
 
-                @if (Model.Members.Count == 0)
+                @{
+                    var activeMembers = Model.Members.Where(m => !m.IsRemoved).ToList();
+                    var removedMembers = Model.Members.Where(m => m.IsRemoved).ToList();
+                }
+
+                @if (activeMembers.Count == 0 && removedMembers.Count == 0)
                 {
                     <div class="text-muted">No members found.</div>
                 }
                 else
                 {
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle">
-                            <thead>
-                                <tr>
-                                    <th>UserId</th>
-                                    <th>Role</th>
-                                    <th style="width: 160px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var m in Model.Members)
-                                {
-                                    var isOwner = string.Equals(Model.CurrentUserRole, "Owner", StringComparison.OrdinalIgnoreCase);
-                                    var isSelf = Model.CurrentUserId != Guid.Empty && m.UserId == Model.CurrentUserId;
-                                    var targetIsOwner = string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase);
-
-                                    var canOwnerRemove = isOwner && !targetIsOwner;
-                                    var canMemberLeave = !isOwner && isSelf;
-
-                                    var showButton = canOwnerRemove || canMemberLeave;
-                                    var buttonText = canMemberLeave ? "Leave" : "Remove";
-                                    var confirmText = canMemberLeave ? "Leave this project?" : "Remove this member?";
-
+                    @* Active Members *@
+                    @if (activeMembers.Count > 0)
+                    {
+                        <div class="table-responsive mb-4">
+                            <table class="table table-sm align-middle">
+                                <thead>
                                     <tr>
-                                        <td>@(m.Email ?? m.UserId.ToString())</td>
-                                        <td>
-                                            <span class="badge @(m.Role == "Owner" ? "bg-dark" : "bg-secondary")">@m.Role</span>
-                                        </td>
-                                        <td class="text-end">
-                                            @if (showButton)
-                                            {
-                                                <form method="post" asp-page-handler="RemoveMember" class="d-inline">
-                                                    <input type="hidden" name="tab" value="members" />
-                                                    <input type="hidden" name="memberUserId" value="@m.UserId" />
-                                                    <button class="btn btn-outline-danger btn-sm"
-                                                            type="submit"
-                                                            onclick="return confirm('@confirmText');">
-                                                        @buttonText
-                                                    </button>
-                                                </form>
-                                            }
-                                        </td>
+                                        <th>Member</th>
+                                        <th>Role</th>
+                                        <th style="width: 160px;"></th>
                                     </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    @foreach (var m in activeMembers)
+                                    {
+                                        var isOwner = string.Equals(Model.CurrentUserRole, "Owner", StringComparison.OrdinalIgnoreCase);
+                                        var isSelf = Model.CurrentUserId != Guid.Empty && m.UserId == Model.CurrentUserId;
+                                        var targetIsOwner = string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase);
+
+                                        var canOwnerRemove = isOwner && !targetIsOwner;
+                                        var canMemberLeave = !isOwner && isSelf;
+
+                                        var showButton = canOwnerRemove || canMemberLeave;
+                                        var buttonText = canMemberLeave ? "Leave" : "Remove";
+                                        var confirmText = canMemberLeave ? "Leave this project?" : "Remove this member?";
+
+                                        <tr>
+                                            <td>@(m.Email ?? m.UserId.ToString())</td>
+                                            <td>
+                                                <span class="badge @(m.Role == "Owner" ? "bg-dark" : "bg-secondary")">@m.Role</span>
+                                            </td>
+                                            <td class="text-end">
+                                                @if (showButton)
+                                                {
+                                                    <form method="post" asp-page-handler="RemoveMember" class="d-inline">
+                                                        <input type="hidden" name="tab" value="members" />
+                                                        <input type="hidden" name="memberUserId" value="@m.UserId" />
+                                                        <button class="btn btn-outline-danger btn-sm"
+                                                                type="submit"
+                                                                onclick="return confirm('@confirmText');">
+                                                            @buttonText
+                                                        </button>
+                                                    </form>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    @* Removed Members (only visible to owners) *@
+                    @if (removedMembers.Count > 0 && string.Equals(Model.CurrentUserRole, "Owner", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="mt-4">
+                            <h6 class="text-muted mb-2">Former Members</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Member</th>
+                                            <th>User ID</th>
+                                            <th>Role</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var m in removedMembers)
+                                        {
+                                            <tr class="text-muted" style="opacity: 0.6;">
+                                                <td>@(m.Email ?? "N/A")</td>
+                                                <td><code class="small">@m.UserId</code></td>
+                                                <td>
+                                                    <span class="badge bg-secondary">@m.Role</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    }
                 }
             </div>
         </div>

@@ -12,10 +12,12 @@ namespace DenoLite.Infrastructure.Services
     public class ProjectService : IProjectService
     {
         private readonly DenoLiteDbContext _db;
+        private readonly IActivityService _activity;
 
-        public ProjectService(DenoLiteDbContext db)
+        public ProjectService(DenoLiteDbContext db, IActivityService activity)
         {
             _db = db;
+            _activity = activity;
         }
 
         public async Task<bool> IsOwnerAsync(Guid projectId, Guid userId)
@@ -112,6 +114,15 @@ namespace DenoLite.Infrastructure.Services
                 .Select(u => u.Email)
                 .FirstOrDefaultAsync();
 
+            // Log activity
+            await _activity.LogAsync(
+                projectId: projectId,
+                taskId: null,
+                actorId: currentUserId,
+                actionType: "MemberAdded",
+                message: $"Member added: {email ?? "Unknown"}"
+            );
+
             return new ProjectMemberDto
             {
                 UserId = member.UserId,
@@ -133,25 +144,86 @@ namespace DenoLite.Infrastructure.Services
             if (!isMember)
                 throw new ForbiddenException("You are not a member of this project.");
 
-            // Return members
-            var members = await (
+            // Get active members
+            var activeMembers = await (
                 from pm in _db.ProjectMembers
                 join u in _db.Users on pm.UserId equals u.Id
                 where pm.ProjectId == projectId
-                      && _db.ProjectMembers.Any(x => x.ProjectId == projectId && x.UserId == currentUserId)
                 orderby (pm.Role == "Owner") descending, pm.UserId
                 select new ProjectMemberDto
                 {
                     UserId = pm.UserId,
                     Role = pm.Role,
-                    Email = u.Email
+                    Email = u.Email,
+                    IsRemoved = false
                 }
             ).ToListAsync();
 
-            if (members.Count == 0)
-                throw new ForbiddenException("You are not a member of this project.");
+            // Get removed members from activity logs (only for owners)
+            var isOwner = await _db.ProjectMembers
+                .AnyAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId && pm.Role == "Owner");
 
-            return members;
+            var removedMembers = new List<ProjectMemberDto>();
+            if (isOwner)
+            {
+                // Find activity logs for member removals
+                var removalLogs = await _db.ActivityLogs
+                    .Where(a => a.ProjectId == projectId && 
+                                (a.ActionType == "MemberRemoved" || a.ActionType == "MemberLeft"))
+                    .OrderByDescending(a => a.CreatedAt)
+                    .ToListAsync();
+
+                // Extract emails from removal logs and look up user IDs
+                var removedEmails = removalLogs
+                    .SelectMany(log => ExtractEmailFromMessage(log.Message))
+                    .Where(e => !string.IsNullOrWhiteSpace(e))
+                    .Distinct()
+                    .ToList();
+
+                if (removedEmails.Any())
+                {
+                    // Get user IDs for removed emails (excluding current active members)
+                    var activeUserIds = activeMembers.Select(m => m.UserId).ToHashSet();
+                    
+                    var removedUsers = await _db.Users
+                        .Where(u => removedEmails.Contains(u.Email.ToLower()))
+                        .Select(u => new { u.Id, u.Email })
+                        .ToListAsync();
+
+                    var removedUsersFiltered = removedUsers
+                        .Where(u => !activeUserIds.Contains(u.Id))
+                        .ToList();
+
+                    removedMembers = removedUsersFiltered.Select(u => new ProjectMemberDto
+                    {
+                        UserId = u.Id,
+                        Email = u.Email,
+                        Role = "Member", // Default role for removed members
+                        IsRemoved = true
+                    }).ToList();
+                }
+            }
+
+            return activeMembers.Concat(removedMembers).ToList();
+        }
+
+        private List<string> ExtractEmailFromMessage(string message)
+        {
+            var emails = new List<string>();
+            if (string.IsNullOrWhiteSpace(message))
+                return emails;
+
+            // Extract email from messages like "Member added: email@example.com" or "Member removed: email@example.com"
+            var emailPattern = @"(?:Member\s+(?:added|removed|left):\s*)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})";
+            var matches = System.Text.RegularExpressions.Regex.Matches(message, emailPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                if (match.Groups.Count > 1 && !string.IsNullOrWhiteSpace(match.Groups[1].Value))
+                {
+                    emails.Add(match.Groups[1].Value.ToLower());
+                }
+            }
+            return emails;
         }
         public async Task RemoveMemberAsync(Guid projectId, Guid memberUserId, Guid currentUserId)
         {
@@ -167,6 +239,18 @@ namespace DenoLite.Infrastructure.Services
             if (currentMember == null)
                 throw new ForbiddenException("You are not a member of this project.");
 
+            // Get member info before removal for activity log
+            var memberToRemove = await _db.ProjectMembers
+                .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == memberUserId);
+
+            if (memberToRemove == null)
+                throw new KeyNotFoundException("Member not found");
+
+            var memberEmail = await _db.Users
+                .Where(u => u.Id == memberUserId)
+                .Select(u => u.Email)
+                .FirstOrDefaultAsync();
+
             // If current user is NOT owner -> can only remove himself (leave project)
             if (!string.Equals(currentMember.Role, "Owner", StringComparison.OrdinalIgnoreCase))
             {
@@ -174,14 +258,17 @@ namespace DenoLite.Infrastructure.Services
                     throw new ForbiddenException("Members can only remove themselves (leave the project).");
 
                 // Member leaving: remove their membership record
-                var self = await _db.ProjectMembers
-                    .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == currentUserId);
-
-                if (self == null)
-                    throw new KeyNotFoundException("Member not found");
-
-                _db.ProjectMembers.Remove(self);
+                _db.ProjectMembers.Remove(memberToRemove);
                 await _db.SaveChangesAsync();
+
+                // Log activity
+                await _activity.LogAsync(
+                    projectId: projectId,
+                    taskId: null,
+                    actorId: currentUserId,
+                    actionType: "MemberLeft",
+                    message: $"Member left: {memberEmail ?? "Unknown"}"
+                );
                 return;
             }
 
@@ -189,14 +276,17 @@ namespace DenoLite.Infrastructure.Services
             if (memberUserId == project.OwnerId)
                 throw new ConflictException("You cannot remove the project owner.");
 
-            var member = await _db.ProjectMembers
-                .FirstOrDefaultAsync(pm => pm.ProjectId == projectId && pm.UserId == memberUserId);
-
-            if (member == null)
-                throw new KeyNotFoundException("Member not found");
-
-            _db.ProjectMembers.Remove(member);
+            _db.ProjectMembers.Remove(memberToRemove);
             await _db.SaveChangesAsync();
+
+            // Log activity
+            await _activity.LogAsync(
+                projectId: projectId,
+                taskId: null,
+                actorId: currentUserId,
+                actionType: "MemberRemoved",
+                message: $"Member removed: {memberEmail ?? "Unknown"}"
+            );
         }
 
         public async Task<PagedResult<ProjectDto>> GetMyProjectsPagedAsync(Guid userId, int page, int pageSize)

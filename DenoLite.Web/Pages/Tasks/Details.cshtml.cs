@@ -296,10 +296,75 @@ namespace DenoLite.Web.Pages.Tasks
                 if (aResp.IsSuccessStatusCode)
                 {
                     Activity = await aResp.Content.ReadFromJsonAsync<PagedResult<ActivityLogDto>>();
+                    
+                    // Load actor emails for all actors in activity logs
+                    if (Activity?.Items != null && Activity.Items.Count > 0 && Task != null)
+                    {
+                        var actorIds = Activity.Items.Select(a => a.ActorId).Distinct().ToList();
+                        await LoadActorEmailsAsync(client, actorIds, Task.ProjectId);
+                    }
                 }
             }
 
             return Page();
+        }
+
+        // ============================================================
+        // Actor emails loader (for activity logs)
+        // ============================================================
+        private async Task LoadActorEmailsAsync(HttpClient client, List<Guid> actorIds, Guid projectId)
+        {
+            // First, load all members (including removed ones for owners) - this covers most actors
+            try
+            {
+                var membersResp = await client.GetAsync($"/api/projects/{projectId}/members");
+                if (membersResp.IsSuccessStatusCode)
+                {
+                    var members = await membersResp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+                    foreach (var member in members)
+                    {
+                        if (!string.IsNullOrWhiteSpace(member.Email))
+                        {
+                            AssigneeEmailById[member.UserId] = member.Email;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors
+            }
+
+            // For any remaining actor IDs, try to extract email from activity log messages
+            foreach (var actorId in actorIds)
+            {
+                if (AssigneeEmailById.ContainsKey(actorId))
+                    continue; // Already loaded
+
+                // Try to extract email from activity messages
+                if (Activity?.Items != null)
+                {
+                    var actorActivities = Activity.Items.Where(a => a.ActorId == actorId).ToList();
+                    foreach (var activity in actorActivities)
+                    {
+                        // Extract email from messages like "Member added: email@example.com (UserId: ...)"
+                        var emailMatch = System.Text.RegularExpressions.Regex.Match(
+                            activity.Message ?? "",
+                            @"(?:Member\s+(?:added|removed|left):\s*)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                        if (emailMatch.Success && emailMatch.Groups.Count > 1)
+                        {
+                            var email = emailMatch.Groups[1].Value;
+                            if (!string.IsNullOrWhiteSpace(email))
+                            {
+                                AssigneeEmailById[actorId] = email;
+                                break; // Found email, move to next actor
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ============================================================
@@ -320,6 +385,9 @@ namespace DenoLite.Web.Pages.Tasks
                 }
 
                 var members = await resp.Content.ReadFromJsonAsync<List<ProjectMemberDto>>() ?? new();
+
+                // Only allow assigning to ACTIVE members
+                members = members.Where(m => !m.IsRemoved).ToList();
 
                 var ordered = members
                     .OrderByDescending(m => string.Equals(m.Role, "Owner", StringComparison.OrdinalIgnoreCase))
@@ -356,6 +424,27 @@ namespace DenoLite.Web.Pages.Tasks
                     sb.AppendLine($"{kvp.Key}: {err.ErrorMessage}");
             }
             return sb.Length == 0 ? "ModelState invalid (unknown reason)." : sb.ToString();
+        }
+
+        // Helper to clean User IDs from old activity log messages
+        private string CleanActivityMessage(string message, string actionType)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return message;
+
+            // Remove User ID patterns from member-related actions
+            if (actionType == "MemberAdded" || actionType == "MemberRemoved" || actionType == "MemberLeft")
+            {
+                // Remove patterns like "(UserId: guid)" or "(Userid: guid)" or "(Userld: guid)" (case insensitive, handles typos)
+                // Matches: User followed by any characters, then : or space, then GUID in parentheses
+                message = System.Text.RegularExpressions.Regex.Replace(
+                    message,
+                    @"\s*\(User[^:)]*[:\s]+[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\)",
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+
+            return message.Trim();
         }
 
         public sealed class AddCommentInputModel

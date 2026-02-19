@@ -1,0 +1,16 @@
+# Local Git configuration to reduce lock file issues
+# This file can be sourced or merged with your global .gitconfig
+
+[core]
+    # Reduce file locking issues on Windows
+    precomposeunicode = false
+    autocrlf = true
+    # Use more aggressive file locking timeout
+    fileMode = false
+
+[alias]
+    # Safe commit alias that cleans locks first
+    safe-commit = "!f() { rm -f .git/index.lock .git/config.lock 2>/dev/null; git commit \"$@\"; }; f"
+    
+    # Safe push alias
+    safe-push = "!f() { rm -f .git/index.lock .git/config.lock 2>/dev/null; git push \"$@\"; }; f"
