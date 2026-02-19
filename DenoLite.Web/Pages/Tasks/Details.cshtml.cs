@@ -427,7 +427,7 @@ namespace DenoLite.Web.Pages.Tasks
         }
 
         // Helper to clean User IDs from old activity log messages
-        private string CleanActivityMessage(string message, string actionType)
+        public string CleanActivityMessage(string message, string actionType)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return message;

@@ -638,7 +638,7 @@ namespace DenoLite.Web.Pages.Projects
             => $"/Projects/Details/{ProjectId}?tab={tab}";
 
         // Helper to clean User IDs from old activity log messages
-        private string CleanActivityMessage(string message, string actionType)
+        public string CleanActivityMessage(string message, string actionType)
         {
             if (string.IsNullOrWhiteSpace(message))
                 return message;
