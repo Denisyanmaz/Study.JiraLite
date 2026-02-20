@@ -737,14 +737,15 @@ namespace DenoLite.Web.Pages.Projects
   <option value=""Done"" {(t.Status == DenoTaskStatus.Done ? "selected" : "")}>Done</option>
 </select>";
 
+                    var encodedTitle = System.Net.WebUtility.HtmlEncode(t.Title);
                     sb.AppendLine($@"
 <a href=""/Tasks/Details/{t.Id}?tab=overview"" class=""text-decoration-none text-dark task-link""
    draggable=""true"" data-task-id=""{t.Id}"" data-status=""{t.Status}"">
   <div class=""card mb-2 shadow-sm"">
     <div class=""card-body p-2"">
       <div class=""d-flex justify-content-between align-items-start gap-2"">
-        <div class=""fw-semibold"" style=""line-height: 1.2;"">{System.Net.WebUtility.HtmlEncode(t.Title)}</div>
-        <span class=""badge {prioCss}"" title=""Priority"">{prioText}</span>
+        <div class=""fw-semibold flex-grow-1"" style=""line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;"" title=""{encodedTitle}"">{encodedTitle}</div>
+        <span class=""badge {prioCss} flex-shrink-0"" title=""Priority"">{prioText}</span>
       </div>");
 
                     if (!string.IsNullOrWhiteSpace(t.Description))
