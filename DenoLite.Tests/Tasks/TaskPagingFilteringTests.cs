@@ -1,6 +1,7 @@
 using FluentAssertions;
 using DenoLite.Application.DTOs;
 using DenoLite.Application.DTOs.Common;
+using DenoLite.Application.DTOs.Task;
 using DenoLite.Domain.Entities;
 using DenoLite.Domain.Enums;
 using DenoLite.Tests.Integration;
@@ -32,7 +33,7 @@ public class TaskPagingFilteringTests : TestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItem>>();
+        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItemBoardDto>>();
         payload.Should().NotBeNull();
         payload!.Page.Should().Be(2);
         payload.PageSize.Should().Be(15);
@@ -81,7 +82,7 @@ public class TaskPagingFilteringTests : TestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItem>>();
+        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItemBoardDto>>();
         payload.Should().NotBeNull();
 
         payload!.TotalCount.Should().Be(12);
@@ -107,7 +108,7 @@ public class TaskPagingFilteringTests : TestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItem>>();
+        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItemBoardDto>>();
         payload.Should().NotBeNull();
 
         payload!.TotalCount.Should().Be(10);
@@ -175,7 +176,7 @@ public class TaskPagingFilteringTests : TestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItem>>();
+        var payload = await response.Content.ReadFromJsonAsync<PagedResult<TaskItemBoardDto>>();
         payload.Should().NotBeNull();
 
         payload!.TotalCount.Should().Be(6);

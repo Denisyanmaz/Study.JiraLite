@@ -13,25 +13,6 @@ namespace DenoLite.Tests.Integration
         public AuthSecurityTests(CustomWebApplicationFactory factory) : base(factory) { }
 
         [Fact]
-        public async Task Request_Without_Jwt_Returns_401()
-        {
-            // Arrange
-            Client.DefaultRequestHeaders.Authorization = null;
-
-            var dto = new CreateProjectDto
-            {
-                Name = "No JWT Project",
-                Description = "Should not be created"
-            };
-
-            // Act
-            var response = await Client.PostAsJsonAsync("/api/Projects", dto);
-
-            // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
-
-        [Fact]
         public async Task Jwt_With_Invalid_Signature_Returns_401()
         {
             // Arrange

@@ -50,7 +50,7 @@ public class TaskSoftDeleteTests : TestBase
         var listResp = await Client.GetAsync($"/api/tasks/project/{project.Id}/paged?page=1&pageSize=50");
         listResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var payload = await listResp.Content.ReadFromJsonAsync<PagedResult<TaskItem>>();
+        var payload = await listResp.Content.ReadFromJsonAsync<PagedResult<TaskItemBoardDto>>();
         payload.Should().NotBeNull();
 
         payload!.Items.Should().NotContain(t => t.Id == created.Id);

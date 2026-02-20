@@ -51,7 +51,7 @@ public class EnrichedActivityMessageTests : TestBase
 
         log!.Message.Should().Contain("Task updated");
         log.Message.Should().Contain("Status");
-        log.Message.Should().Contain("?");      // shows it contains diffs
+        log.Message.Should().Contain("→");      // shows it contains diffs (arrow character)
         log.Message.Should().Contain("Priority");
     }
 

@@ -32,7 +32,7 @@ public class CommentsAndActivityTests : TestBase
         var response = await Client.PostAsJsonAsync($"/api/comments/task/{taskId}", dto);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var created = await response.Content.ReadFromJsonAsync<CommentDto>();
         created.Should().NotBeNull();
@@ -123,7 +123,7 @@ public class CommentsAndActivityTests : TestBase
 
         // Act
         var resp = await Client.PostAsJsonAsync($"/api/comments/task/{taskId}", new CreateCommentDto { Body = "Log this" });
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        resp.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Assert (query activity via API)
         var activityResp = await Client.GetAsync($"/api/activity/project/{project.Id}?page=1&pageSize=50");

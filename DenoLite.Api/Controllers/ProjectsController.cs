@@ -1,5 +1,6 @@
 using DenoLite.Application.DTOs.Common;
 using DenoLite.Application.DTOs.Project;
+using DenoLite.Application.DTOs.ProjectMember;
 using DenoLite.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,7 +58,7 @@ namespace DenoLite.Api.Controllers
             var memberDto = await _projectService.AddMemberAsync(projectId, dto, currentUserId);
 
             // returns the member that was added
-            return Ok(memberDto);
+            return CreatedAtAction(nameof(GetMembers), new { projectId = projectId }, memberDto);
         }
 
         // GET /api/projects/{projectId}/members
@@ -88,6 +89,10 @@ namespace DenoLite.Api.Controllers
 
         private Guid GetCurrentUserId()
         {
+            // ✅ Ensure user is authenticated (should be guaranteed by [Authorize], but double-check)
+            if (User?.Identity?.IsAuthenticated != true)
+                throw new UnauthorizedAccessException("User is not authenticated");
+
             var idClaim =
                 User.FindFirstValue("id") ??
                 User.FindFirstValue(ClaimTypes.NameIdentifier);

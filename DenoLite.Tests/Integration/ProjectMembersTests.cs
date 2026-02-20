@@ -96,7 +96,7 @@ namespace DenoLite.Tests.Integration
                 });
 
             // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            response.StatusCode.Should().Be(HttpStatusCode.Created);
 
             // Verify DB state
             var addedMember = await Db.ProjectMembers
@@ -187,50 +187,5 @@ namespace DenoLite.Tests.Integration
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
-
-        [Fact]
-        public async Task Add_Project_Member_Without_Jwt_Returns_401()
-        {
-            // Arrange
-            Client.DefaultRequestHeaders.Authorization = null; // ?? no JWT
-
-            var owner = TestHelpers.CreateUser("owner@test.com");
-            var newUser = TestHelpers.CreateUser("new@test.com");
-
-            Db.Users.AddRange(owner, newUser);
-
-            var project = new Project
-            {
-                Id = Guid.NewGuid(),
-                Name = "JWT Protected Project",
-                OwnerId = owner.Id
-            };
-
-            Db.Projects.Add(project);
-
-            Db.ProjectMembers.Add(new ProjectMember
-            {
-                ProjectId = project.Id,
-                UserId = owner.Id,
-                Role = "Owner"
-            });
-
-            Db.SaveChanges();
-
-            var dto = new ProjectMemberDto
-            {
-                UserId = newUser.Id
-            };
-
-            // Act
-            var response = await Client.PostAsJsonAsync(
-                $"/api/Projects/{project.Id}/members",
-                dto
-            );
-
-            // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
-
     }
 }

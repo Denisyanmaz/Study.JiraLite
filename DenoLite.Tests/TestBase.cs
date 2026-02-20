@@ -1,4 +1,5 @@
 using DenoLite.Domain.Entities;
+using DenoLite.Domain.Enums;
 using DenoLite.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,7 +42,7 @@ namespace DenoLite.Tests
         {
             // Adjust table names if your EF mappings differ
             await Db.Database.ExecuteSqlRawAsync(@"
-            TRUNCATE TABLE ""ActivityLogs"", ""Comments"", ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users""
+            TRUNCATE TABLE ""ActivityLogs"", ""Comments"", ""Tasks"", ""ProjectMembers"", ""Projects"", ""Users"", ""EmailChangeRequests"", ""EmailVerifications""
             RESTART IDENTITY CASCADE;
             ");
         }
@@ -82,6 +83,28 @@ namespace DenoLite.Tests
 
             await Db.SaveChangesAsync();
             return (owner, member, project);
+        }
+
+        protected async Task<(User owner, User member, Project project, TaskItem task)> CreateProjectWithTaskAsync()
+        {
+            var (owner, member, project) = await SeedProjectWithMemberAsync();
+
+            var task = new TaskItem
+            {
+                Id = Guid.NewGuid(),
+                Title = "Test Task",
+                Description = "Test Description",
+                Status = DenoTaskStatus.Todo,
+                Priority = 3,
+                ProjectId = project.Id,
+                AssigneeId = member.Id,
+                DueDate = DateTime.UtcNow.AddDays(7)
+            };
+
+            Db.Tasks.Add(task);
+            await Db.SaveChangesAsync();
+
+            return (owner, member, project, task);
         }
     }
 }

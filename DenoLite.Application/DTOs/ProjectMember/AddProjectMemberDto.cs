@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 
-public class AddProjectMemberDto
+namespace DenoLite.Application.DTOs.ProjectMember
 {
-    [Required]
-    public Guid UserId { get; set; }
+    public class AddProjectMemberDto
+    {
+        [Required]
+        public Guid UserId { get; set; }
 
-    public string Role { get; set; } = "Member";
+        public string Role { get; set; } = "Member";
+    }
 }

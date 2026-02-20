@@ -369,7 +369,7 @@ namespace DenoLite.Infrastructure.Services
 
             var expectedHash = HashOtp(newEmail, code);
             if (!FixedTimeEquals(changeRequest.CodeHash, expectedHash))
-                throw new UnauthorizedAccessException("Invalid verification code.");
+                throw new BadRequestException("Invalid verification code.");
 
             // Update email
             user.Email = newEmail;

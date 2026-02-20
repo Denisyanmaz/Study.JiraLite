@@ -22,7 +22,7 @@ namespace DenoLite.Api.Controllers
         public async Task<IActionResult> AddToTask(Guid taskId, [FromBody] CreateCommentDto dto)
         {
             var result = await _comments.AddToTaskAsync(taskId, dto, GetCurrentUserId());
-            return Ok(result);
+            return CreatedAtAction(nameof(GetByTask), new { taskId = taskId }, result);
         }
 
         [HttpGet("task/{taskId}")]

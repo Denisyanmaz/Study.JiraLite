@@ -30,7 +30,7 @@ public class ActivitySearchQueryTests : TestBase
         var comment = new CreateCommentDto { Body = $"This is {token} inside a comment." };
 
         var cResp = await Client.PostAsJsonAsync($"/api/comments/task/{taskId}", comment);
-        cResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        cResp.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Act
         var resp = await Client.GetAsync($"/api/activity/project/{project.Id}?q={token}&page=1&pageSize=50");
@@ -60,7 +60,7 @@ public class ActivitySearchQueryTests : TestBase
             $"/api/comments/task/{taskId}",
             new CreateCommentDto { Body = $"This contains {knownToken}" });
 
-        cResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        cResp.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Act
         var unknown = "DOES_NOT_EXIST_9C18F";

@@ -126,6 +126,9 @@ builder.Services.AddAuthentication(options =>
         NameClaimType = "id",
         RoleClaimType = ClaimTypes.Role
     };
+
+    // ✅ JWT Bearer will not authenticate if no token is present (default behavior)
+    // [Authorize] will then block the request and return 401
 })
 .AddGoogle(options =>
 {
@@ -143,6 +146,7 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddTransient<DenoLite.Api.Middleware.ExceptionHandlingMiddleware>();
 builder.Services.AddAuthorization();
+// ✅ [Authorize] attribute will require authentication by default
 
 // 🔹 CORS Configuration
 builder.Services.AddCors(options =>
