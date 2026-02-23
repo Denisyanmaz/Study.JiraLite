@@ -159,7 +159,10 @@ namespace DenoLite.Infrastructure.Services
         {
             var now = DateTime.UtcNow;
 
-            var existing = await _db.EmailVerifications.SingleOrDefaultAsync(v => v.UserId == user.Id);
+            var existing = await _db.EmailVerifications
+                .Where(v => v.UserId == user.Id)
+                .OrderByDescending(v => v.CreatedAt)
+                .FirstOrDefaultAsync();
             var previousSendCount = existing?.SendCount ?? 0;
 
             // ✅ cooldown: 60 seconds between sends
@@ -172,7 +175,7 @@ namespace DenoLite.Infrastructure.Services
 
             // ✅ basic resend limit
             if (previousSendCount >= 5)
-                throw new Exception("Too many resend requests. Please try later.");
+                throw new TooManyRequestsException("Too many resend requests. Please try later.");
 
             // replace old record if exists
             if (existing != null)

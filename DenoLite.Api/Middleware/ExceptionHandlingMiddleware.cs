@@ -7,6 +7,13 @@ namespace DenoLite.Api.Middleware
 {
     public sealed class ExceptionHandlingMiddleware : IMiddleware
     {
+        private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+
+        public ExceptionHandlingMiddleware(ILogger<ExceptionHandlingMiddleware> logger)
+        {
+            _logger = logger;
+        }
+
         public async Task InvokeAsync(HttpContext context, RequestDelegate next)
         {
             try
@@ -54,8 +61,9 @@ namespace DenoLite.Api.Middleware
             {
                 await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
                 await WriteProblem(
                     context,
                     StatusCodes.Status500InternalServerError,
