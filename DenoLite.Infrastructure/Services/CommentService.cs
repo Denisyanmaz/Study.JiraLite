@@ -45,7 +45,7 @@ namespace DenoLite.Infrastructure.Services
                 taskId: task.Id,
                 actorId: currentUserId,
                 actionType: "CommentAdded",
-                message: $"Comment added on task '{task.Title}': \"{Short(dto.Body, 80)}\""
+                message: $"Comment added on task '{task.Title}': \"{(dto.Body ?? "").Trim()}\""
             );
 
             var author = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == currentUserId);
@@ -84,13 +84,6 @@ namespace DenoLite.Infrastructure.Services
                     CreatedAt = x.c.CreatedAt
                 })
                 .ToListAsync();
-        }
-
-        private static string Short(string? text, int max = 80)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-            text = text.Trim();
-            return text.Length <= max ? text : text.Substring(0, max) + "";
         }
     }
 }

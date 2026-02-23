@@ -248,7 +248,7 @@
                 }
                 <form method="post" asp-page-handler="AddComment" asp-route-id="@Model.Id" asp-route-tab="comments">
                     <div class="mb-2">
-                        <textarea class="form-control" rows="3"
+                        <textarea class="form-control" rows="3" maxlength="400"
                                   asp-for="AddCommentInput.Body"
                                   placeholder="Write a comment..."></textarea>
                         <span class="text-danger" asp-validation-for="AddCommentInput.Body"></span>

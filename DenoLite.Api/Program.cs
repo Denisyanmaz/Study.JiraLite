@@ -76,7 +76,7 @@ builder.Services.AddOpenApiDocument(config =>
 // 🔹 Database
 // 🔹 Database (always Postgres; tests override the connection string)
 builder.Services.AddDbContext<DenoLiteDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.")));
 
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Email"));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();

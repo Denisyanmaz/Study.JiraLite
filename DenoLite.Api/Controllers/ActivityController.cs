@@ -1,6 +1,7 @@
 using DenoLite.Application.DTOs.Common;
 using DenoLite.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -12,10 +13,22 @@ namespace DenoLite.Api.Controllers
     public class ActivityController : ControllerBase
     {
         private readonly IActivityService _activity;
+        private readonly IWebHostEnvironment _env;
 
-        public ActivityController(IActivityService activity)
+        public ActivityController(IActivityService activity, IWebHostEnvironment env)
         {
             _activity = activity;
+            _env = env;
+        }
+
+        /// <summary>One-time fix: update existing CommentAdded activity messages to full comment body. Development only.</summary>
+        [HttpPost("fix-comment-added-messages")]
+        public async Task<IActionResult> FixCommentAddedMessages()
+        {
+            if (!_env.IsDevelopment())
+                return NotFound();
+            var updated = await _activity.FixCommentAddedMessagesAsync();
+            return Ok(new { updated });
         }
 
         [HttpGet("project/{projectId}")]

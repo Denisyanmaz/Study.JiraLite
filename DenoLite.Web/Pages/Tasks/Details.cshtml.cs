@@ -450,7 +450,7 @@ namespace DenoLite.Web.Pages.Tasks
         public sealed class AddCommentInputModel
         {
             [Required]
-            [StringLength(2000, MinimumLength = 1)]
+            [StringLength(400, MinimumLength = 1)]
             public string Body { get; set; } = "";
         }
     }

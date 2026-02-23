@@ -27,8 +27,8 @@ builder.Services.AddTransient<JwtCookieHandler>();
 
 builder.Services.AddHttpClient("DenoLiteApi", client =>
 {
-    var baseUrl = builder.Configuration["Api:BaseUrl"];
-    client.BaseAddress = new Uri(baseUrl!);
+    var baseUrl = builder.Configuration["Api:BaseUrl"] ?? throw new InvalidOperationException("Api:BaseUrl is required in configuration.");
+    client.BaseAddress = new Uri(baseUrl);
 })
 .AddHttpMessageHandler<JwtCookieHandler>();
 var app = builder.Build();

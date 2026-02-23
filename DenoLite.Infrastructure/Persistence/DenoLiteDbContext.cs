@@ -210,7 +210,7 @@ namespace DenoLite.Infrastructure.Persistence
             {
                 entity.Property(c => c.Body)
                       .IsRequired()
-                      .HasMaxLength(2000);
+                      .HasMaxLength(400);
 
                 entity.Property(c => c.AuthorId)
                       .IsRequired();

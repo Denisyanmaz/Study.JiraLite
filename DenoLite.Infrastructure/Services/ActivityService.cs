@@ -157,5 +157,42 @@ namespace DenoLite.Infrastructure.Services
 
             return q;
         }
+
+        /// <summary>One-time fix: update existing CommentAdded activity messages to use full comment body.</summary>
+        public async Task<int> FixCommentAddedMessagesAsync()
+        {
+            var activities = await _db.ActivityLogs
+                .Where(a => a.ActionType == "CommentAdded" && a.TaskId != null)
+                .ToListAsync();
+
+            int updated = 0;
+            foreach (var activity in activities)
+            {
+                var taskId = activity.TaskId!.Value;
+                var task = await _db.Tasks.FindAsync(taskId);
+                if (task == null) continue;
+
+                var comments = await _db.Comments
+                    .Where(c => c.TaskId == taskId && c.AuthorId == activity.ActorId)
+                    .ToListAsync();
+                var comment = comments
+                    .OrderBy(c => Math.Abs((c.CreatedAt - activity.CreatedAt).Ticks))
+                    .FirstOrDefault();
+
+                if (comment == null) continue;
+
+                var newMessage = $"Comment added on task '{task.Title}': \"{(comment.Body ?? "").Trim()}\"";
+                if (activity.Message != newMessage)
+                {
+                    activity.Message = newMessage;
+                    updated++;
+                }
+            }
+
+            if (updated > 0)
+                await _db.SaveChangesAsync();
+
+            return updated;
+        }
     }
 }
