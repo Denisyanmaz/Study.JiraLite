@@ -19,9 +19,9 @@ namespace DenoLite.Infrastructure.Services
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
                 EnableSsl = _settings.UseSsl,
-
-                // ? important for real SMTP servers
-                UseDefaultCredentials = false
+                UseDefaultCredentials = false,
+                // Short timeout so we log a clear failure instead of hanging for 100s
+                Timeout = 15_000
             };
 
             if (!string.IsNullOrWhiteSpace(_settings.Username))
