@@ -15,6 +15,7 @@ using System.Text;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using dotenv.net;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 // ✅ VERY IMPORTANT: stop ASP.NET from remapping JWT claims (sub → NameIdentifier)
@@ -36,6 +37,15 @@ var builder = WebApplication.CreateBuilder(args);
 // ✅ Allow user-secrets for local runs even in Production environment
 // (User-secrets exist only on your machine; server won't have them anyway.)
 builder.Configuration.AddUserSecrets<Program>(optional: true);
+
+// 🔹 Forwarded headers (so Request.Scheme is https behind Render/proxy; fixes Google redirect_uri_mismatch)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // 🔹 Add services to the container
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -174,6 +184,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 
 app.UseMiddleware<DenoLite.Api.Middleware.ExceptionHandlingMiddleware>();
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
 // 🔹 CORS must be before UseAuthentication
