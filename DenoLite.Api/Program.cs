@@ -148,12 +148,15 @@ builder.Services.AddTransient<DenoLite.Api.Middleware.ExceptionHandlingMiddlewar
 builder.Services.AddAuthorization();
 // ✅ [Authorize] attribute will require authentication by default
 
-// 🔹 CORS Configuration
+// 🔹 CORS Configuration (Cors:AllowedOrigins in config, or localhost for dev)
+var corsOrigins = builder.Configuration["Cors:AllowedOrigins"]?
+    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? new[] { "https://localhost:7002", "http://localhost:5142" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWebApp", policy =>
     {
-        policy.WithOrigins("https://localhost:7002", "http://localhost:5142")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
