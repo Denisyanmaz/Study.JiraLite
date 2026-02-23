@@ -49,8 +49,11 @@ Make sure your repo is on GitHub (you already use it).
    | `Otp__Secret` | Copy from `.env.production` |
    | `Google__ClientId` | Copy from `.env.production` |
    | `Google__ClientSecret` | Copy from `.env.production` |
+   | `WebApp__BaseUrl` | **Your deployed Web app URL** (e.g. `https://denolite-web.onrender.com`). Required so after Google login the API redirects to the Web app, not localhost. |
 
-   For Google login to work on Render, add your Render Web app URL to the allowed redirect URIs in Google Cloud Console (e.g. `https://denolite-web.onrender.com/signin-google` or your actual callback path).
+   For Google login: in Google Cloud Console add **Authorised redirect URI** `https://YOUR-API-URL/api/auth/google-callback` (e.g. `https://denolite.onrender.com/api/auth/google-callback`). Set `WebApp__BaseUrl` above to your Web URL so the API redirects back to the site after login.
+
+   **Connection string:** Key must be exactly `ConnectionStrings__DefaultConnection` (two underscores). Value: paste the **Internal Database URL** from Render with **no quotes** around it. If you get "Format of the initialization string does not conform to specification", use the **key=value** form instead of the URI: `Host=HOST;Port=5432;Database=DATABASE;Username=USER;Password=PASSWORD;SSL Mode=Require` (get HOST, DATABASE, USER, PASSWORD from your Render DB info).
 
 9. **Create Web Service.** Wait for the first deploy. Then copy the service URL (e.g. `https://denolite-api.onrender.com`).
 10. **Environment** → set `Jwt__Issuer` and `Jwt__Audience` to that URL if you used a placeholder. **Save changes** (triggers a redeploy).

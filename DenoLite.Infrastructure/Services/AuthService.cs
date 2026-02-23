@@ -385,9 +385,9 @@ namespace DenoLite.Infrastructure.Services
         {
             email = email.Trim().ToLowerInvariant();
 
-            // Check if user exists by GoogleId or Email
+            // Check if user exists by GoogleId or Email (guard against null Email)
             var user = await _db.Users.FirstOrDefaultAsync(u => 
-                u.GoogleId == googleId || u.Email.ToLower() == email);
+                u.GoogleId == googleId || (u.Email != null && u.Email.ToLower() == email));
 
             if (user == null)
             {
