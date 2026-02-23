@@ -42,6 +42,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseContentSecurityPolicy(); // CSP header to mitigate XSS
 app.UseStaticFiles(); // ✅ This serves files from wwwroot
 app.UseRouting();
 app.UseAuthentication();
