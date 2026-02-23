@@ -161,9 +161,7 @@ namespace DenoLite.Infrastructure.Persistence
                 // FK: ProjectMember -> Project configured above
 
                 // Postgres check constraint: role is Owner/Member only
-                entity.HasCheckConstraint(
-                    "CK_ProjectMembers_Role",
-                    @"""Role"" IN ('Owner','Member')");
+                entity.ToTable(t => t.HasCheckConstraint("CK_ProjectMembers_Role", @"""Role"" IN ('Owner','Member')"));
             });
 
             // ----------------------------
@@ -191,9 +189,7 @@ namespace DenoLite.Infrastructure.Persistence
                       .HasDefaultValue(false);
 
                 // Postgres check constraint: priority range
-                entity.HasCheckConstraint(
-                    "CK_Tasks_Priority",
-                    @"""Priority"" >= 1 AND ""Priority"" <= 5");
+                entity.ToTable(t => t.HasCheckConstraint("CK_Tasks_Priority", @"""Priority"" >= 1 AND ""Priority"" <= 5"));
 
                 // Helpful indexes for your common queries
                 entity.HasIndex(t => t.ProjectId);
