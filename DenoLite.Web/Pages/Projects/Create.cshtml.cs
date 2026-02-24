@@ -1,4 +1,5 @@
 using DenoLite.Application.DTOs.Project;
+using DenoLite.Web.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Net;
@@ -36,8 +37,7 @@ namespace DenoLite.Web.Pages.Projects
 
             if (!resp.IsSuccessStatusCode)
             {
-                var body = await resp.Content.ReadAsStringAsync();
-                Error = $"API error: {(int)resp.StatusCode} {resp.ReasonPhrase}\n{body}";
+                Error = await ApiErrorReader.ReadFriendlyMessageAsync(resp);
                 return Page();
             }
 

@@ -41,10 +41,14 @@ namespace DenoLite.Infrastructure.Services
             if (!userExists)
                 throw new BadRequestException("User not found. Cannot create project for non-existent user.");
 
+            var name = (dto.Name ?? "").Trim();
+            if (await _db.Projects.AnyAsync(p => p.OwnerId == userId && p.Name == name))
+                throw new ConflictException("A project with this name already exists. Please choose a different name.");
+
             var project = new Project
             {
-                Name = dto.Name,
-                Description = dto.Description,
+                Name = name,
+                Description = dto.Description?.Trim(),
                 OwnerId = userId
             };
 

@@ -8,7 +8,7 @@
 
 @if (!string.IsNullOrWhiteSpace(Model.Error))
 {
-    <div style="color:red; white-space:pre-wrap;">@Model.Error</div>
+    <div class="alert alert-danger" role="alert">@Model.Error</div>
 }
 
 <form method="post">
