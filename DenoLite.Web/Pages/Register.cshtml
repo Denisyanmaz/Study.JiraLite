@@ -1,14 +1,14 @@
 @page
 @model DenoLite.Web.Pages.RegisterModel
 
-<h2>Register</h2>
+<h2 class="text-center">Register</h2>
 
 @if (!string.IsNullOrWhiteSpace(Model.Error))
 {
     <div style="color:red; white-space:pre-wrap">@Model.Error</div>
 }
 
-<div class="mb-3">
+<div class="auth-form mb-3">
     <a href="@Model.ApiBaseUrl/api/auth/google-login" class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center" style="gap: 8px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
             <path d="M15.545 6.558a9.42 9.42 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.689 7.689 0 0 1 5.352 2.082l-2.284 2.284A4.347 4.347 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.792 4.792 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.702 3.702 0 0 0 1.599-2.431H8v-3.08h7.545z"/>
@@ -17,34 +17,35 @@
     </a>
 </div>
 
-<div class="text-center mb-3" style="position: relative;">
-    <hr style="margin: 0;">
-    <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 0 10px;">or</span>
+<div class="auth-form mb-3">
+    <hr class="my-0" />
 </div>
 
-<form method="post">
-    <div>
+<form method="post" class="auth-form">
+    <div class="mb-3">
         <label>Email</label><br />
-        <input asp-for="Input.Email" />
+        <input asp-for="Input.Email" class="form-control" />
         <span asp-validation-for="Input.Email" style="color:red"></span>
     </div>
 
-    <div style="margin-top:10px">
+    <div class="mb-3">
         <label>Password</label><br />
-        <input asp-for="Input.Password" type="password" />
+        <input asp-for="Input.Password" class="form-control" type="password" />
         <span asp-validation-for="Input.Password" style="color:red"></span>
     </div>
 
-    <div style="margin-top:10px">
+    <div class="mb-3">
         <label>Confirm Password</label><br />
-        <input asp-for="Input.ConfirmPassword" type="password" />
+        <input asp-for="Input.ConfirmPassword" class="form-control" type="password" />
         <span asp-validation-for="Input.ConfirmPassword" style="color:red"></span>
     </div>
 
-    <div style="margin-top:15px">
-        <button type="submit">Register</button>
-        <a href="/Login" style="margin-left:10px">Already have an account?</a>
+    <div class="text-center mt-4">
+        <button type="submit" class="btn btn-primary rounded-pill px-4 py-2">Register</button>
     </div>
+    <p class="text-center mt-3 mb-0">
+        <a asp-page="/Login">Already have an account?</a>
+    </p>
 </form>
 
 @section Scripts {
