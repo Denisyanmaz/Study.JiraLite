@@ -4,6 +4,7 @@ using DenoLite.Application.DTOs.ProjectMember;
 using DenoLite.Application.Exceptions;
 using DenoLite.Application.Interfaces;
 using DenoLite.Domain.Entities;
+using DenoLite.Domain.Enums;
 using DenoLite.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,11 +14,13 @@ namespace DenoLite.Infrastructure.Services
     {
         private readonly DenoLiteDbContext _db;
         private readonly IActivityService _activity;
+        private readonly IEmailSender _emailSender;
 
-        public ProjectService(DenoLiteDbContext db, IActivityService activity)
+        public ProjectService(DenoLiteDbContext db, IActivityService activity, IEmailSender emailSender)
         {
             _db = db;
             _activity = activity;
+            _emailSender = emailSender;
         }
 
         public async Task<bool> IsOwnerAsync(Guid projectId, Guid userId)
@@ -108,36 +111,95 @@ namespace DenoLite.Infrastructure.Services
                 throw new ConflictException("User is already a member of this project.");
             // Rule: owner cannot add another Owner via AddMember
 
-            var member = new ProjectMember
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            try
             {
-                ProjectId = projectId,
-                UserId = dto.UserId,
-                Role = "Member"
-            };
+                var email = await _db.Users
+                    .Where(u => u.Id == dto.UserId)
+                    .Select(u => u.Email)
+                    .FirstOrDefaultAsync();
 
-            _db.ProjectMembers.Add(member);
-            await _db.SaveChangesAsync();
+                var member = new ProjectMember
+                {
+                    ProjectId = projectId,
+                    UserId = dto.UserId,
+                    Role = "Member"
+                };
+                _db.ProjectMembers.Add(member);
 
-            var email = await _db.Users
-                .Where(u => u.Id == member.UserId)
-                .Select(u => u.Email)
-                .FirstOrDefaultAsync();
+                // Only create welcome task if they don't already have a task in this project (e.g. re-added member).
+                var alreadyHasTaskInProject = await _db.Tasks
+                    .AnyAsync(t => t.ProjectId == projectId && t.AssigneeId == dto.UserId && !t.IsDeleted);
 
-            // Log activity
-            await _activity.LogAsync(
-                projectId: projectId,
-                taskId: null,
-                actorId: currentUserId,
-                actionType: "MemberAdded",
-                message: $"Member added: {email ?? "Unknown"}"
-            );
+                TaskItem? welcomeTask = null;
+                if (!alreadyHasTaskInProject)
+                {
+                    var taskTitle = string.IsNullOrEmpty(email) ? "New member" : (email.IndexOf('@') > 0 ? email[..email.IndexOf('@')] : email);
+                    welcomeTask = new TaskItem
+                    {
+                        Title = taskTitle,
+                        Description = "read the project details",
+                        Status = DenoTaskStatus.Todo,
+                        Priority = 1,
+                        AssigneeId = dto.UserId,
+                        ProjectId = projectId,
+                        DueDate = DateTime.UtcNow.AddDays(3),
+                        CreatedBy = currentUserId
+                    };
+                    _db.Tasks.Add(welcomeTask);
+                }
 
-            return new ProjectMemberDto
+                await _db.SaveChangesAsync();
+
+                await _activity.LogAsync(
+                    projectId: projectId,
+                    taskId: null,
+                    actorId: currentUserId,
+                    actionType: "MemberAdded",
+                    message: $"Member added: {email ?? "Unknown"}"
+                );
+
+                await transaction.CommitAsync();
+
+                if (welcomeTask != null)
+                    _ = SendAssignmentEmailAsync(welcomeTask.AssigneeId, welcomeTask.Title, welcomeTask.Id);
+
+                return new ProjectMemberDto
+                {
+                    UserId = member.UserId,
+                    Role = member.Role,
+                    Email = email
+                };
+            }
+            catch
             {
-                UserId = member.UserId,
-                Role = member.Role,
-                Email = email
-            };
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private async Task SendAssignmentEmailAsync(Guid assigneeId, string taskTitle, Guid taskId)
+        {
+            try
+            {
+                var user = await _db.Users.FindAsync(assigneeId);
+                if (user == null || string.IsNullOrWhiteSpace(user.Email)) return;
+
+                var subject = $"You have been assigned a task: \"{taskTitle}\"";
+                var body = $"""
+                    <p>Hi,</p>
+                    <p>You have been assigned the following task in <strong>DenoLite</strong>:</p>
+                    <p><strong>{System.Net.WebUtility.HtmlEncode(taskTitle)}</strong></p>
+                    <p><a href="/Tasks/Details/{taskId}?tab=overview">View task</a></p>
+                    <p>— The DenoLite Team</p>
+                    """;
+
+                await _emailSender.SendAsync(user.Email, subject, body);
+            }
+            catch
+            {
+                // email failure must never break add-member flow
+            }
         }
         public async Task<List<ProjectMemberDto>> GetMembersAsync(Guid projectId, Guid currentUserId)
         {
