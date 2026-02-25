@@ -5,6 +5,7 @@ using DenoLite.Application.DTOs.ProjectMember;
 using DenoLite.Application.DTOs.Task;
 using DenoLite.Domain.Entities;
 using DenoLite.Domain.Enums;
+using Ganss.Xss;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -663,6 +664,27 @@ namespace DenoLite.Web.Pages.Projects
             return message.Trim();
         }
 
+        private static string SanitizeTaskDescription(string? html)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return "";
+            var sanitizer = new HtmlSanitizer();
+            sanitizer.AllowedTags.Clear();
+            sanitizer.AllowedTags.Add("p");
+            sanitizer.AllowedTags.Add("br");
+            sanitizer.AllowedTags.Add("strong");
+            sanitizer.AllowedTags.Add("b");
+            sanitizer.AllowedTags.Add("em");
+            sanitizer.AllowedTags.Add("i");
+            sanitizer.AllowedTags.Add("u");
+            sanitizer.AllowedTags.Add("s");
+            sanitizer.AllowedTags.Add("ul");
+            sanitizer.AllowedTags.Add("ol");
+            sanitizer.AllowedTags.Add("li");
+            sanitizer.AllowedTags.Add("a");
+            sanitizer.AllowedAttributes.Add("href");
+            return sanitizer.Sanitize(html);
+        }
+
         // ✅ RenderColumn: shows assignee email and red "member left" when assignee is no longer in project
         public IHtmlContent RenderColumn(string status, List<TaskItemBoardDto> items)
         {
@@ -738,9 +760,7 @@ namespace DenoLite.Web.Pages.Projects
 </select>";
 
                     var encodedTitle = System.Net.WebUtility.HtmlEncode(t.Title);
-                    var encodedDescription = !string.IsNullOrWhiteSpace(t.Description) 
-                        ? System.Net.WebUtility.HtmlEncode(t.Description) 
-                        : "";
+                    var descriptionHtml = SanitizeTaskDescription(t.Description);
                     
                     sb.AppendLine($@"
 <a href=""/Tasks/Details/{t.Id}?tab=overview"" class=""text-decoration-none text-dark task-link""
@@ -756,10 +776,8 @@ namespace DenoLite.Web.Pages.Projects
 
       <!-- Description Section -->
       {(string.IsNullOrWhiteSpace(t.Description) ? "" : $@"
-      <div class=""mb-3"">
-        <p class=""text-muted small mb-0"" style=""line-height: 1.5; word-wrap: break-word; word-break: break-word;"">
-          {encodedDescription}
-        </p>
+      <div class=""mb-3 text-muted small task-description"" style=""line-height: 1.5; word-wrap: break-word; word-break: break-word;"">
+        {descriptionHtml}
       </div>")}
 
       <!-- Badges Row -->
