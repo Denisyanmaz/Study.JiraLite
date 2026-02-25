@@ -288,6 +288,30 @@ namespace DenoLite.Infrastructure.Services
             user.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            // Notify user by email (security warning in case they forgot app open somewhere)
+            if (!string.IsNullOrWhiteSpace(user.Email))
+                _ = SendPasswordChangedEmailAsync(user.Email);
+        }
+
+        private async Task SendPasswordChangedEmailAsync(string email)
+        {
+            try
+            {
+                var subject = "Your DenoLite password was changed";
+                var html = @"
+                    <div style='font-family: Arial, sans-serif;'>
+                        <h2>Password changed</h2>
+                        <p>Your DenoLite account password was changed successfully.</p>
+                        <p>If you did not make this change, please contact support.</p>
+                        <p>— The DenoLite Team</p>
+                    </div>";
+                await _emailSender.SendAsync(email, subject, html);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send password-changed notification to {Email}", email);
+            }
         }
 
         public async Task RequestEmailChangeAsync(Guid userId, string password, string newEmail)
