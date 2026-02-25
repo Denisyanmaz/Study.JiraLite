@@ -8,14 +8,15 @@ public static class ContentSecurityPolicyMiddleware
 {
     private const string HeaderName = "Content-Security-Policy";
 
-    // Allows same-origin + inline scripts/styles (needed for Razor inline scripts and style attributes)
+    // Allows same-origin + inline scripts/styles (needed for Razor inline scripts and style attributes).
+    // cdn.jsdelivr.net is used for Quill rich text editor (script + CSS). connect-src allows fetch/XHR to CDN and hot-reload WebSocket.
     private static readonly string Policy = string.Join("; ", new[]
     {
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline'",
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "img-src 'self' data: https:",
-        "connect-src 'self'",
+        "connect-src 'self' https://cdn.jsdelivr.net wss://localhost:* wss://127.0.0.1:*",
         "form-action 'self'",
         "base-uri 'self'",
         "frame-ancestors 'self'",

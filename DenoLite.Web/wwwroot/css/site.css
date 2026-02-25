@@ -30,6 +30,41 @@ body {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
 }
+
+/* Contenteditable placeholder (fallback description editor) */
+[contenteditable="true"][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: var(--bs-secondary-color);
+}
+
+/* Create Task modal: fixed height + scrollable body so all fields are reachable */
+.create-task-modal-dialog .modal-content {
+  max-height: 90vh;
+}
+.create-task-modal-dialog .modal-body.create-task-modal-body {
+  max-height: calc(90vh - 130px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+/* Description editor: fixed 150px height so layout is predictable */
+#createTaskModal .create-task-description-col {
+  overflow: visible;
+}
+#createTaskModal .create-task-description-editor,
+.create-task-description-editor.ql-container {
+  height: 150px !important;
+  min-height: 150px !important;
+  max-height: 150px !important;
+}
+.create-task-description-editor .ql-editor {
+  min-height: 100px;
+/* Subtle separator between description and Status/Priority/Due Date */
+#createTaskModal .create-task-separator {
+  border-top: 1px solid #e9ecef;
+}
+  max-height: 110px;
+  overflow-y: auto;
+}
 .home-bg {
     min-height: 100vh;
     background-image: url('/images/bg.jpg');

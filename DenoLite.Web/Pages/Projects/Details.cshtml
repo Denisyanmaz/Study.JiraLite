@@ -52,6 +52,7 @@ else
         @if (Model.Tab == "board")
         {
             <button type="button"
+                    id="createTaskModalTrigger"
                     class="btn btn-success"
                     data-bs-toggle="modal"
                     data-bs-target="#createTaskModal">
@@ -147,16 +148,13 @@ else
         <!-- Create Task Modal -->
         <div class="modal fade" id="createTaskModal" tabindex="-1"
              aria-labelledby="createTaskModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-dialog modal-xl create-task-modal-dialog">
                 <div class="modal-content">
-
                     <div class="modal-header">
                         <h5 class="modal-title" id="createTaskModalLabel">Create Task</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-
-                    <div class="modal-body">
-
+                    <div class="modal-body create-task-modal-body">
                         @* If create failed, show error *@
                         @if (!string.IsNullOrWhiteSpace(Model.CreateError))
                         {
@@ -182,9 +180,24 @@ else
                                 <span class="text-danger" asp-validation-for="CreateTaskInput.AssigneeId"></span>
                             </div>
 
-                            <div class="col-12">
+                            <div class="col-12 create-task-description-col">
                                 <label class="form-label">Description</label>
-                                <textarea class="form-control" asp-for="CreateTaskInput.Description" maxlength="500"></textarea>
+                                <input type="hidden" asp-for="CreateTaskInput.Description" id="createTaskDescriptionValue" />
+                                <div id="createTaskDescriptionEditor" class="border rounded bg-white create-task-description-editor" style="height: 150px; overflow-y: auto; cursor: text;"></div>
+                                <div id="createTaskDescriptionFallbackWrap" class="d-none">
+                                    <div class="btn-toolbar mb-1 border rounded p-1 bg-light" role="toolbar">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Bold" data-cmd="bold">B</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Italic" data-cmd="italic">I</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Underline" data-cmd="underline">U</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Bullet list" data-cmd="insertUnorderedList">•</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Numbered list" data-cmd="insertOrderedList">1.</button>
+                                    </div>
+                                    <div id="createTaskDescriptionFallback" class="form-control border rounded" contenteditable="true" style="min-height: 120px; max-height: 200px; overflow-y: auto;" data-placeholder="Describe the task…"></div>
+                            <div class="col-12 pt-2 mt-2 create-task-separator">
+                            </div>
+
+                                </div>
+                                <span class="text-danger" asp-validation-for="CreateTaskInput.Description"></span>
                             </div>
 
                             <div class="col-md-4">
@@ -511,6 +524,170 @@ else
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <link href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
+    <script>
+        (function () {
+            let createTaskQuill = null;
+            let fallbackToolbarInited = false;
+            const modalEl = document.getElementById("createTaskModal");
+            const editorEl = document.getElementById("createTaskDescriptionEditor");
+            const hiddenInput = document.getElementById("createTaskDescriptionValue");
+            const fallbackWrap = document.getElementById("createTaskDescriptionFallbackWrap");
+            const fallbackEd = document.getElementById("createTaskDescriptionFallback");
+            const form = document.getElementById("createTaskForm");
+
+            function useFallbackEditor() {
+                if (!editorEl || !hiddenInput) return;
+                editorEl.classList.add("d-none");
+                if (fallbackWrap) fallbackWrap.classList.remove("d-none");
+                if (fallbackEd) {
+                    fallbackEd.innerHTML = hiddenInput.value || "";
+                    fallbackEd.setAttribute("data-placeholder", "Describe the task…");
+                }
+            }
+
+            function initFallbackToolbar() {
+                if (!fallbackEd || fallbackToolbarInited) return;
+                fallbackToolbarInited = true;
+
+                function updateFallbackToolbarState() {
+                    if (!fallbackWrap) return;
+                    const cmdList = ["bold", "italic", "underline", "insertUnorderedList", "insertOrderedList"];
+                    cmdList.forEach(function (cmd) {
+                        const btn = fallbackWrap.querySelector('[data-cmd="' + cmd + '"]');
+                        if (!btn) return;
+                        let active = false;
+                        try {
+                            active = document.queryCommandState(cmd);
+                        } catch {
+                            active = false;
+                        }
+                        if (active) {
+                            btn.classList.add("btn-secondary", "text-white");
+                            btn.classList.remove("btn-outline-secondary");
+                        } else {
+                            btn.classList.remove("btn-secondary", "text-white");
+                            btn.classList.add("btn-outline-secondary");
+                        }
+                    });
+                }
+
+                fallbackWrap?.querySelectorAll("[data-cmd]").forEach(function (btn) {
+                    btn.addEventListener("click", function () {
+                        fallbackEd.focus();
+                        document.execCommand(btn.getAttribute("data-cmd"), false, null);
+                        fallbackEd.dispatchEvent(new Event("input", { bubbles: true }));
+                        updateFallbackToolbarState();
+                    });
+                });
+
+                fallbackEd.addEventListener("keyup", updateFallbackToolbarState);
+                fallbackEd.addEventListener("mouseup", updateFallbackToolbarState);
+
+                fallbackEd.addEventListener("input", function () {
+                    if (hiddenInput) hiddenInput.value = fallbackEd.innerHTML;
+                });
+                fallbackEd.addEventListener("blur", function () {
+                    if (hiddenInput) hiddenInput.value = fallbackEd.innerHTML;
+                });
+
+                // Initialize button states based on initial selection/content
+                updateFallbackToolbarState();
+            }
+
+            function initCreateTaskQuill() {
+                if (createTaskQuill) return;
+                if (!editorEl || !hiddenInput) return;
+                if (typeof Quill === "undefined") {
+                    useFallbackEditor();
+                    initFallbackToolbar();
+                    return;
+                }
+                try {
+                    createTaskQuill = new Quill(editorEl, {
+                        theme: "snow",
+                        placeholder: "Describe the task…",
+                        modules: {
+                            toolbar: [
+                                ["bold", "italic", "underline", "strike"],
+                                [{ list: "ordered" }, { list: "bullet" }],
+                                ["link"],
+                                ["clean"]
+                            ]
+                        }
+                    });
+                    if (hiddenInput.value) {
+                        try {
+                            createTaskQuill.root.innerHTML = hiddenInput.value;
+                        } catch (_) {
+                            createTaskQuill.setText(hiddenInput.value);
+                        }
+                    }
+                    createTaskQuill.on("text-change", function () {
+                        hiddenInput.value = createTaskQuill.root.innerHTML;
+                    });
+                    if (fallbackWrap) fallbackWrap.classList.add("d-none");
+                } catch (e) {
+                    useFallbackEditor();
+                    initFallbackToolbar();
+                }
+            }
+
+            function moveFocusToCreateTaskTrigger() {
+                var trigger = document.getElementById("createTaskModalTrigger");
+                if (trigger && typeof trigger.focus === "function") {
+                    trigger.focus({ preventScroll: true });
+                }
+            }
+
+            modalEl?.addEventListener("hide.bs.modal", function () {
+                if (document.activeElement && modalEl.contains(document.activeElement)) {
+                    document.activeElement.blur();
+                }
+                moveFocusToCreateTaskTrigger();
+            });
+
+            modalEl?.addEventListener("click", function (e) {
+                if (e.target.closest("[data-bs-dismiss=\"modal\"]") || e.target.closest(".btn-close")) {
+                    moveFocusToCreateTaskTrigger();
+                }
+            }, true);
+
+            document.addEventListener("mousedown", function (e) {
+                if (e.target.classList.contains("modal-backdrop") && modalEl && modalEl.classList.contains("show")) {
+                    moveFocusToCreateTaskTrigger();
+                }
+            }, true);
+
+            modalEl?.addEventListener("shown.bs.modal", function () {
+                setTimeout(function () {
+                    initCreateTaskQuill();
+                    if (hiddenInput && createTaskQuill) {
+                        try {
+                            createTaskQuill.root.innerHTML = hiddenInput.value || "";
+                        } catch (_) {
+                            createTaskQuill.setText(hiddenInput.value || "");
+                        }
+                        createTaskQuill.focus();
+                    }
+                    if (fallbackWrap && !createTaskQuill && !fallbackWrap.classList.contains("d-none")) {
+                        fallbackEd?.focus();
+                    }
+                }, 150);
+            });
+
+            form?.addEventListener("submit", function () {
+                if (hiddenInput) {
+                    if (createTaskQuill) {
+                        hiddenInput.value = createTaskQuill.root.innerHTML;
+                    } else if (fallbackEd) {
+                        hiddenInput.value = fallbackEd.innerHTML || "";
+                    }
+                }
+            });
+        })();
+    </script>
     @if (!string.IsNullOrWhiteSpace(Model.CreateError))
     {
         <script>
