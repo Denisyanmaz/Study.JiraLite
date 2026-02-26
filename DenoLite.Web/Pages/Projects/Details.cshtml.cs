@@ -3,6 +3,7 @@ using DenoLite.Application.DTOs.Common;
 using DenoLite.Application.DTOs.Project;
 using DenoLite.Application.DTOs.ProjectMember;
 using DenoLite.Application.DTOs.Task;
+using DenoLite.Application.DTOs.BoardColumn;
 using DenoLite.Domain.Entities;
 using DenoLite.Domain.Enums;
 using Ganss.Xss;
@@ -114,6 +115,11 @@ namespace DenoLite.Web.Pages.Projects
         public string? ProjectDescription { get; private set; }
 
         public List<TaskItemBoardDto> Tasks { get; private set; } = new();
+        /// <summary>Board columns (customizable). Empty if API not used or project has no columns.</summary>
+        public List<BoardColumnDto> BoardColumns { get; private set; } = new();
+        /// <summary>Tasks grouped by BoardColumnId for the current page. Includes key for each column that has tasks on this page.</summary>
+        public Dictionary<Guid, List<TaskItemBoardDto>> TasksByColumnId { get; private set; } = new();
+
         public List<TaskItemBoardDto> TodoTasks { get; private set; } = new();
         public List<TaskItemBoardDto> InProgressTasks { get; private set; } = new();
         public List<TaskItemBoardDto> DoneTasks { get; private set; } = new();
@@ -172,7 +178,8 @@ namespace DenoLite.Web.Pages.Projects
                 Priority = CreateTaskInput.Priority,
                 ProjectId = ProjectId,
                 AssigneeId = CreateTaskInput.AssigneeId,
-                DueDate = CreateTaskInput.DueDate
+                DueDate = CreateTaskInput.DueDate,
+                BoardColumnId = CreateTaskInput.BoardColumnId
             };
 
             var resp = await client.PostAsJsonAsync("/api/tasks", dto);
@@ -358,6 +365,14 @@ namespace DenoLite.Web.Pages.Projects
             if (PageNumber < 1) PageNumber = 1;
             if (PageSize < 1) PageSize = 15;
 
+            // Load board columns (customizable)
+            var columnsResp = await client.GetAsync($"/api/projects/{ProjectId}/board-columns");
+            if (columnsResp.IsSuccessStatusCode)
+            {
+                var columns = await columnsResp.Content.ReadFromJsonAsync<List<BoardColumnDto>>();
+                BoardColumns = columns ?? new();
+            }
+
             var url = BuildTasksUrl(ProjectId, Status, Priority, AssigneeId, DueFrom, DueTo, PageNumber, PageSize);
 
             var tasksResp = await client.GetAsync(url);
@@ -372,6 +387,13 @@ namespace DenoLite.Web.Pages.Projects
             Tasks = payload?.Items?.ToList() ?? new();
             TotalCount = payload?.TotalCount ?? 0;
 
+            // Group tasks by BoardColumnId for column-based board
+            TasksByColumnId = Tasks
+                .Where(t => t.BoardColumnId.HasValue)
+                .GroupBy(t => t.BoardColumnId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Legacy status-based grouping (fallback when no columns or for filters)
             TodoTasks = Tasks.Where(t => t.Status == DenoTaskStatus.Todo).ToList();
             InProgressTasks = Tasks.Where(t => t.Status == DenoTaskStatus.InProgress).ToList();
             DoneTasks = Tasks.Where(t => t.Status == DenoTaskStatus.Done).ToList();
@@ -728,8 +750,9 @@ namespace DenoLite.Web.Pages.Projects
             }
 
             var sb = new StringBuilder();
+            var dropAttr = $"data-drop-status=\"{status}\"";
             sb.AppendLine($@"<div class=""col-md-4"">
-  <div class=""border rounded p-2 bg-light board-column"" data-drop-status=""{status}"">
+  <div class=""border rounded p-2 bg-light board-column"" {dropAttr}>
     <div class=""d-flex justify-content-between align-items-center mb-2"">
       <strong>{title}</strong>
       <span class=""badge bg-secondary"">{items.Count}</span>
@@ -815,6 +838,56 @@ namespace DenoLite.Web.Pages.Projects
             return new HtmlString(sb.ToString());
         }
 
+        /// <summary>Render a single customizable board column. Uses data-drop-column-id for drag-drop.</summary>
+        public IHtmlContent RenderBoardColumn(BoardColumnDto column, List<TaskItemBoardDto> items)
+        {
+            var title = column.Name;
+            string PriorityText(int p) => p switch { 1 => "1 (High)", 2 => "2 (Med-High)", 3 => "3 (Medium)", 4 => "4 (Med-Low)", 5 => "5 (Low)", _ => $"{p}" };
+            string PriorityBadgeClass(int p) => p switch { 1 => "bg-danger", 2 => "bg-warning text-dark", 3 => "bg-secondary", 4 => "bg-info text-dark", 5 => "bg-light text-dark", _ => "bg-secondary" };
+            (string text, string css) DueBadge(DateTime? due)
+            {
+                if (!due.HasValue) return ("No due", "bg-light text-dark");
+                var d = due.Value.Date;
+                var today = DateTime.UtcNow.Date;
+                if (d < today) return ($"Overdue ({d:dd.MM.yyyy})", "bg-danger");
+                if (d <= today.AddDays(3)) return ($"Due soon ({d:dd.MM.yyyy})", "bg-warning text-dark");
+                return ($"{d:dd.MM.yyyy}", "bg-secondary");
+            }
+            var sb = new StringBuilder();
+            sb.AppendLine($@"<div class=""col board-column-wrapper"" data-column-id=""{column.Id}"" data-column-task-count=""{column.TaskCount}"">
+  <div class=""border rounded p-2 bg-light board-column"" data-drop-column-id=""{column.Id}"">
+    <div class=""d-flex justify-content-between align-items-center mb-2 column-header flex-wrap gap-1"">
+      <strong class=""column-title"" data-column-name=""{System.Net.WebUtility.HtmlEncode(title)}"">{System.Net.WebUtility.HtmlEncode(title)}</strong>
+      <input type=""text"" class=""form-control form-control-sm column-title-edit edit-only d-none"" style=""max-width: 140px;"" value=""{System.Net.WebUtility.HtmlEncode(title)}"" data-column-id=""{column.Id}"" />
+      <span class=""d-flex align-items-center gap-1"">
+        <span class=""badge bg-secondary"">{items.Count}</span>
+        <button type=""button"" class=""btn btn-danger btn-sm edit-only d-none delete-column-btn"" data-column-id=""{column.Id}"" data-column-task-count=""{column.TaskCount}"" title=""Delete column"">×</button>
+      </span>
+    </div>");
+            if (items.Count == 0)
+                sb.AppendLine(@"<div class=""text-muted small"">No items</div>");
+            else
+            {
+                foreach (var t in items)
+                {
+                    var prioText = PriorityText(t.Priority);
+                    var prioCss = PriorityBadgeClass(t.Priority);
+                    var (dueText, dueCss) = DueBadge(t.DueDate);
+                    var assigneeLabel = !string.IsNullOrWhiteSpace(t.AssigneeEmail) ? t.AssigneeEmail : t.AssigneeId.ToString();
+                    var memberLeft = !CurrentMemberIds.Contains(t.AssigneeId);
+                    var tagsHtml = t.Tags != null && t.Tags.Count > 0
+                        ? string.Join(" ", t.Tags.Select(tag => $"<span class=\"badge task-tag\" data-tag-id=\"{tag.Id}\" data-task-id=\"{t.Id}\" style=\"background-color:{System.Net.WebUtility.HtmlEncode(tag.Color)};color:#fff;\">{System.Net.WebUtility.HtmlEncode(tag.Label)}</span>"))
+                        : "";
+                    var encodedTitle = System.Net.WebUtility.HtmlEncode(t.Title);
+                    var descriptionHtml = SanitizeTaskDescription(t.Description);
+                    var tagButtonsHtml = $@"<div class=""d-flex flex-wrap align-items-center gap-1 mb-2""><button type=""button"" class=""btn btn-sm btn-outline-primary add-tags-btn"" data-task-id=""{t.Id}"" title=""Add a tag"">Add Tags</button>{(t.Tags != null && t.Tags.Count > 0 ? $@"<button type=""button"" class=""btn btn-sm btn-outline-danger remove-tags-btn"" data-task-id=""{t.Id}"" title=""Click then click a tag to remove it"">Remove tags</button>" : "")}</div>";
+                    sb.AppendLine($@"<a href=""/Tasks/Details/{t.Id}?tab=overview"" class=""text-decoration-none text-dark task-link"" draggable=""true"" data-task-id=""{t.Id}"" data-status=""{t.Status}"" data-board-column-id=""{t.BoardColumnId}""><div class=""card mb-3 shadow-sm task-card"" style=""transition: transform 0.2s, box-shadow 0.2s;""><div class=""card-body p-3""><div class=""d-flex justify-content-between align-items-start gap-2 mb-2""><h6 class=""card-title mb-0 fw-semibold flex-grow-1"" style=""line-height: 1.4; word-wrap: break-word; word-break: break-word;"" title=""{System.Net.WebUtility.HtmlEncode(t.Title ?? "")}"">{encodedTitle}</h6><div class=""d-flex flex-wrap gap-1 justify-content-end"" style=""min-width: 0;"">{tagsHtml}</div></div>{(string.IsNullOrWhiteSpace(t.Description) ? "" : $@"<div class=""mb-3 text-muted small task-description"" style=""line-height: 1.5; word-wrap: break-word; word-break: break-word;"">{descriptionHtml}</div>")}<div class=""d-flex flex-wrap align-items-center gap-2 mb-2""><span class=""badge {prioCss}"" title=""Priority: {prioText}"">{prioText}</span><span class=""badge {dueCss}"" title=""Due date: {dueText}"">{dueText}</span></div>{tagButtonsHtml}<div class=""border-top pt-2 mt-2""><div class=""d-flex align-items-center gap-1""><small class=""text-muted"">Assignee:</small><small class=""text-truncate"" style=""max-width: 150px;"" title=""{System.Net.WebUtility.HtmlEncode(assigneeLabel)}""><code class=""small"">{System.Net.WebUtility.HtmlEncode(assigneeLabel)}</code></small>{(memberLeft ? @"<span class=""text-danger"" title=""Member left project"">⚠</span>" : "")}</div></div></div></div></a>");
+                }
+            }
+            sb.AppendLine(@"  </div></div>");
+            return new HtmlString(sb.ToString());
+        }
+
         // UI Model (keep here for now; moving to DTO is optional)
         public class CreateTaskInputModel
         {
@@ -834,6 +907,9 @@ namespace DenoLite.Web.Pages.Projects
             public Guid AssigneeId { get; set; }
 
             public DateTime? DueDate { get; set; }
+
+            /// <summary>Optional board column for the task. When set, status is derived from column name.</summary>
+            public Guid? BoardColumnId { get; set; }
         }
     }
 }

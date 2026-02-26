@@ -8,6 +8,9 @@ public sealed class TaskQueryDto : TasksPagedQueryDto
 {
     public DenoTaskStatus? Status { get; set; }
 
+    /// <summary>Filter by board column (customizable columns).</summary>
+    public Guid? BoardColumnId { get; set; }
+
     [Range(1, 5)]
     public int? Priority { get; set; }
 

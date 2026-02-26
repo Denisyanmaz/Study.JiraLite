@@ -12,6 +12,8 @@ namespace DenoLite.Domain.Entities
         public Guid AssigneeId { get; set; }
         public Guid ProjectId { get; set; }
         public DateTime? DueDate { get; set; }
+        /// <summary>Board column (customizable per project). Null = use Status for backward compatibility.</summary>
+        public Guid? BoardColumnId { get; set; }
 
         // ? Soft delete fields
         public bool IsDeleted { get; set; } = false;

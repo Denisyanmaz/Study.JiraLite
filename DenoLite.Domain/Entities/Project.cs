@@ -11,5 +11,6 @@ namespace DenoLite.Domain.Entities
 
         public ICollection<ProjectMember> Members { get; set; } = new List<ProjectMember>();
         public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
+        public ICollection<BoardColumn> BoardColumns { get; set; } = new List<BoardColumn>();
     }
 }

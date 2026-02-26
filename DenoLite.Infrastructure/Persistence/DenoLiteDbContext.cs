@@ -28,6 +28,7 @@ namespace DenoLite.Infrastructure.Persistence
         public DbSet<EmailChangeRequest> EmailChangeRequests => Set<EmailChangeRequest>();
         public DbSet<PasswordReset> PasswordResets => Set<PasswordReset>();
         public DbSet<TaskTag> TaskTags => Set<TaskTag>();
+        public DbSet<BoardColumn> BoardColumns => Set<BoardColumn>();
 
 
         public override int SaveChanges()
@@ -169,6 +170,12 @@ namespace DenoLite.Infrastructure.Persistence
                       .WithOne() // TaskItem doesn't currently have navigation Project
                       .HasForeignKey(t => t.ProjectId)
                       .OnDelete(DeleteBehavior.Restrict); // important: we soft-delete tasks; avoid cascades surprises
+
+                // Relationship: Project -> BoardColumns
+                entity.HasMany(p => p.BoardColumns)
+                      .WithOne(bc => bc.Project)
+                      .HasForeignKey(bc => bc.ProjectId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             // ----------------------------
@@ -225,10 +232,17 @@ namespace DenoLite.Infrastructure.Persistence
 
                 // Helpful indexes for your common queries
                 entity.HasIndex(t => t.ProjectId);
+                entity.HasIndex(t => t.BoardColumnId);
                 entity.HasIndex(t => new { t.ProjectId, t.Status });
                 entity.HasIndex(t => new { t.ProjectId, t.IsDeleted });
                 entity.HasIndex(t => new { t.ProjectId, t.AssigneeId });
                 entity.HasIndex(t => t.DueDate);
+
+                entity.HasOne<BoardColumn>()
+                      .WithMany()
+                      .HasForeignKey(t => t.BoardColumnId)
+                      .IsRequired(false)
+                      .OnDelete(DeleteBehavior.SetNull);
             });
 
             // ----------------------------
@@ -290,6 +304,21 @@ namespace DenoLite.Infrastructure.Persistence
                 entity.HasIndex(a => new { a.ProjectId, a.CreatedAt });
                 entity.HasIndex(a => new { a.TaskId, a.CreatedAt });
                 entity.HasIndex(a => a.ActorId);
+            });
+
+            // ----------------------------
+            // Board Columns
+            // ----------------------------
+            modelBuilder.Entity<BoardColumn>(entity =>
+            {
+                entity.Property(bc => bc.Name)
+                      .IsRequired()
+                      .HasMaxLength(100);
+                entity.Property(bc => bc.ProjectId)
+                      .IsRequired();
+                entity.Property(bc => bc.SortOrder)
+                      .IsRequired();
+                entity.HasIndex(bc => bc.ProjectId);
             });
 
             // ----------------------------

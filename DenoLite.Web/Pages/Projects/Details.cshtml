@@ -202,11 +202,23 @@ else
 
                             <div class="col-md-4">
                                 <label class="form-label">Status</label>
-                                <select class="form-select" asp-for="CreateTaskInput.Status">
-                                    <option value="Todo">Todo</option>
-                                    <option value="InProgress">InProgress</option>
-                                    <option value="Done">Done</option>
-                                </select>
+                                @if (Model.BoardColumns.Any())
+                                {
+                                    <select class="form-select" asp-for="CreateTaskInput.BoardColumnId">
+                                        @foreach (var col in Model.BoardColumns)
+                                        {
+                                            <option value="@col.Id">@col.Name</option>
+                                        }
+                                    </select>
+                                }
+                                else
+                                {
+                                    <select class="form-select" asp-for="CreateTaskInput.Status">
+                                        <option value="Todo">Todo</option>
+                                        <option value="InProgress">InProgress</option>
+                                        <option value="Done">Done</option>
+                                    </select>
+                                }
                             </div>
 
                             <div class="col-md-4">
@@ -243,18 +255,40 @@ else
 
         <!-- Board -->
         <div class="card">
-            <div class="card-header d-flex justify-content-between">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Board</strong>
-                <span>Total: @Model.TotalCount</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span>Total: @Model.TotalCount</span>
+                    @if (Model.BoardColumns.Any())
+                    {
+                        <button type="button" id="editBoardBtn" class="btn btn-outline-secondary btn-sm">Edit board</button>
+                    }
+                </div>
             </div>
 
             <div class="card-body">
                 <div id="boardToast" class="alert alert-danger d-none"></div>
 
-                <div class="row g-3">
-                    @Model.RenderColumn("Todo", Model.TodoTasks)
-                    @Model.RenderColumn("InProgress", Model.InProgressTasks)
-                    @Model.RenderColumn("Done", Model.DoneTasks)
+                <div id="boardColumnsRow" class="row g-3" data-project-id="@Model.ProjectId" data-max-columns="5">
+                    @if (Model.BoardColumns.Any())
+                    {
+                        @foreach (var col in Model.BoardColumns)
+                        {
+                            var colTasks = Model.TasksByColumnId.GetValueOrDefault(col.Id) ?? new List<DenoLite.Application.DTOs.Task.TaskItemBoardDto>();
+                            @Model.RenderBoardColumn(col, colTasks)
+                        }
+                        <div id="addColumnPlaceholder" class="col d-none edit-only" style="min-width: 120px;">
+                            <div class="border rounded p-2 bg-light h-100 d-flex align-items-center justify-content-center">
+                                <button type="button" id="addColumnBtn" class="btn btn-success btn-sm" title="Add column (max 5)">+</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        @Model.RenderColumn("Todo", Model.TodoTasks)
+                        @Model.RenderColumn("InProgress", Model.InProgressTasks)
+                        @Model.RenderColumn("Done", Model.DoneTasks)
+                    }
                 </div>
             </div>
 
@@ -1159,30 +1193,130 @@ else
                     col.addEventListener("drop", async e => {
                         e.preventDefault();
 
+                        const targetColumnId = col.dataset.dropColumnId;
                         const targetStatus = col.dataset.dropStatus;
                         const taskId = dragTaskId || e.dataTransfer.getData("text/plain");
+                        const fromColumnId = document.querySelector(`[data-task-id="${taskId}"]`)?.closest(".board-column")?.dataset?.dropColumnId;
 
-                        if (!taskId || dragFromStatus === targetStatus) return;
+                        if (!taskId) return;
+                        if (targetColumnId && fromColumnId === targetColumnId) return;
+                        if (targetStatus && dragFromStatus === targetStatus) return;
 
-                        const resp = await fetch("/Projects/UpdateTaskStatus", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                taskId: taskId,
-                                status: targetStatus,
-                                projectId: "@Model.ProjectId"
-                            })
-                        });
-
-                        if (!resp.ok) {
-                            const text = await resp.text();
-                            showError(text);
-                            return;
+                        if (targetColumnId) {
+                            const resp = await fetch("/Projects/UpdateTaskBoardColumn", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    taskId: taskId,
+                                    boardColumnId: targetColumnId,
+                                    projectId: "@Model.ProjectId"
+                                })
+                            });
+                            if (!resp.ok) {
+                                const text = await resp.text();
+                                showError(text || "Failed to move task.");
+                                return;
+                            }
+                        } else {
+                            const resp = await fetch("/Projects/UpdateTaskStatus", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    taskId: taskId,
+                                    status: targetStatus,
+                                    projectId: "@Model.ProjectId"
+                                })
+                            });
+                            if (!resp.ok) {
+                                const text = await resp.text();
+                                showError(text);
+                                return;
+                            }
                         }
-
                         location.reload();
                     });
                 });
+
+                // Edit board: toggle edit mode, show/hide column rename, delete, add
+                const editBoardBtn = document.getElementById("editBoardBtn");
+                const boardColumnsRow = document.getElementById("boardColumnsRow");
+                const addColumnPlaceholder = document.getElementById("addColumnPlaceholder");
+                const maxColumns = boardColumnsRow ? parseInt(boardColumnsRow.dataset.maxColumns || "5", 10) : 5;
+                const projectId = boardColumnsRow ? boardColumnsRow.dataset.projectId : null;
+
+                if (editBoardBtn && boardColumnsRow) {
+                    editBoardBtn.addEventListener("click", () => {
+                        const isEdit = boardColumnsRow.classList.toggle("board-edit-mode");
+                        editBoardBtn.textContent = isEdit ? "Done editing" : "Edit board";
+                        document.querySelectorAll(".column-title").forEach(el => { el.classList.toggle("d-none", isEdit); });
+                        document.querySelectorAll(".column-title-edit").forEach(el => { el.classList.toggle("d-none", !isEdit); });
+                        document.querySelectorAll(".delete-column-btn").forEach(el => { el.classList.toggle("d-none", !isEdit); });
+                        if (addColumnPlaceholder) {
+                            const colCount = document.querySelectorAll(".board-column-wrapper").length;
+                            addColumnPlaceholder.classList.toggle("d-none", !isEdit || colCount >= maxColumns);
+                        }
+                    });
+
+                    document.querySelectorAll(".delete-column-btn").forEach(btn => {
+                        btn.addEventListener("click", async (e) => {
+                            e.preventDefault();
+                            const columnId = btn.dataset.columnId;
+                            const taskCount = parseInt(btn.dataset.columnTaskCount || "0", 10);
+                            if (taskCount > 0) {
+                                alert("This column has " + taskCount + " task(s). You will lose them if you delete it. Move all tasks to other columns first to avoid losing them.");
+                                return;
+                            }
+                            if (!confirm("Delete this column?")) return;
+                            const resp = await fetch("/Projects/DeleteBoardColumn", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ columnId: columnId })
+                            });
+                            if (resp.status === 401) { window.location.href = "/Login"; return; }
+                            if (!resp.ok) {
+                                const text = await resp.text();
+                                showError(text || "Failed to delete column.");
+                                return;
+                            }
+                            location.reload();
+                        });
+                    });
+
+                    document.querySelectorAll(".column-title-edit").forEach(input => {
+                        input.addEventListener("blur", saveColumnName);
+                        input.addEventListener("keydown", (e) => { if (e.key === "Enter") { input.blur(); } });
+                        function saveColumnName() {
+                            const columnId = input.dataset.columnId;
+                            const name = (input.value || "").trim();
+                            if (!name) return;
+                            fetch("/Projects/UpdateBoardColumn", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ columnId: columnId, name: name })
+                            }).then(r => { if (r.ok) location.reload(); else r.text().then(showError); });
+                        }
+                    });
+
+                    const addColumnBtn = document.getElementById("addColumnBtn");
+                    if (addColumnBtn && projectId) {
+                        addColumnBtn.addEventListener("click", async () => {
+                            const name = prompt("New column name:", "New column");
+                            if (!name || !name.trim()) return;
+                            const resp = await fetch("/Projects/CreateBoardColumn", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ projectId: projectId, name: name.trim() })
+                            });
+                            if (resp.status === 401) { window.location.href = "/Login"; return; }
+                            if (!resp.ok) {
+                                const text = await resp.text();
+                                showError(text || "Failed to add column (max " + maxColumns + " columns).");
+                                return;
+                            }
+                            location.reload();
+                        });
+                    }
+                }
             })();
         </script>
     }
