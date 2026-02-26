@@ -183,7 +183,7 @@ namespace DenoLite.Infrastructure.Services
             try
             {
                 var user = await _db.Users.FindAsync(assigneeId);
-                if (user == null || string.IsNullOrWhiteSpace(user.Email)) return;
+                if (user == null || string.IsNullOrWhiteSpace(user.Email) || !user.NotificationsEnabled) return;
 
                 var subject = $"You have been assigned a task: \"{taskTitle}\"";
                 var body = $"""

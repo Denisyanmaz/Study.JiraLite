@@ -20,6 +20,34 @@ namespace DenoLite.Web.Pages
             return NotFound();
         }
 
+        public async Task<IActionResult> OnGetProfileAsync()
+        {
+            var client = _httpClientFactory.CreateClient("DenoLiteApi");
+            var response = await client.GetAsync("/api/auth/me");
+            if (response.StatusCode == HttpStatusCode.Unauthorized || !response.IsSuccessStatusCode)
+                return Unauthorized();
+            var json = await response.Content.ReadFromJsonAsync<ProfileResponse>();
+            return new JsonResult(json ?? new ProfileResponse { NotificationsEnabled = true });
+        }
+
+        public async Task<IActionResult> OnPostUpdateNotificationsAsync()
+        {
+            var dto = await Request.ReadFromJsonAsync<UpdateNotificationsRequest>();
+            if (dto == null)
+                return BadRequest("Missing body.");
+            var client = _httpClientFactory.CreateClient("DenoLiteApi");
+            var response = await client.PatchAsJsonAsync("/api/auth/notifications", new { Enabled = dto.Enabled });
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return Unauthorized();
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                return StatusCode((int)response.StatusCode, errorText);
+            }
+            var result = await response.Content.ReadFromJsonAsync<ProfileResponse>();
+            return new JsonResult(result ?? new ProfileResponse { NotificationsEnabled = dto.Enabled });
+        }
+
         public async Task<IActionResult> OnPostChangePasswordAsync()
         {
             var dto = await Request.ReadFromJsonAsync<ChangePasswordRequest>();
@@ -114,6 +142,16 @@ namespace DenoLite.Web.Pages
         {
             public string NewEmail { get; set; } = string.Empty;
             public string Code { get; set; } = string.Empty;
+        }
+
+        public class ProfileResponse
+        {
+            public bool NotificationsEnabled { get; set; }
+        }
+
+        public class UpdateNotificationsRequest
+        {
+            public bool Enabled { get; set; }
         }
     }
 }

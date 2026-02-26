@@ -14,5 +14,7 @@ namespace DenoLite.Application.Interfaces
         Task<AuthResponseDto> AuthenticateWithGoogleAsync(string googleId, string email);
         Task RequestPasswordResetAsync(string email);
         Task ResetPasswordAsync(string email, string code, string newPassword);
+        Task<bool> GetNotificationsEnabledAsync(Guid userId);
+        Task SetNotificationsEnabledAsync(Guid userId, bool enabled);
     }
 }

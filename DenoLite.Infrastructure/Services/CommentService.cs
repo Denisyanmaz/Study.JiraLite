@@ -32,10 +32,10 @@ namespace DenoLite.Infrastructure.Services
             if (!isMember)
                 throw new ForbiddenException("You are not a member of this project.");
 
-            // Resolve assignee email up-front (before any background email tasks)
-            var assigneeEmail = await _db.Users
+            // Resolve assignee email and notification preference (before any background email tasks)
+            var assigneeInfo = await _db.Users
                 .Where(u => u.Id == task.AssigneeId)
-                .Select(u => u.Email)
+                .Select(u => new { u.Email, u.NotificationsEnabled })
                 .FirstOrDefaultAsync();
 
             var comment = new TaskComment
@@ -62,13 +62,15 @@ namespace DenoLite.Infrastructure.Services
             // Best-effort mention notifications for comments (reuse same handle logic as tasks)
             await NotifyMentionedUsersAsync(task, comment, currentUserId);
 
-            // Notify assignee about the new comment.
+            // Notify assignee about the new comment (only if they have notifications enabled).
             // Skip if the author is the assignee themselves.
             if (task.AssigneeId != Guid.Empty &&
                 task.AssigneeId != currentUserId &&
-                !string.IsNullOrWhiteSpace(assigneeEmail))
+                assigneeInfo != null &&
+                !string.IsNullOrWhiteSpace(assigneeInfo.Email) &&
+                assigneeInfo.NotificationsEnabled)
             {
-                _ = SendNewCommentEmailAsync(assigneeEmail, task, comment);
+                _ = SendNewCommentEmailAsync(assigneeInfo.Email, task, comment);
             }
 
             var author = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == currentUserId);
@@ -126,7 +128,7 @@ namespace DenoLite.Infrastructure.Services
                 var members = await (
                     from pm in _db.ProjectMembers
                     join u in _db.Users on pm.UserId equals u.Id
-                    where pm.ProjectId == task.ProjectId && !string.IsNullOrEmpty(u.Email)
+                    where pm.ProjectId == task.ProjectId && !string.IsNullOrEmpty(u.Email) && u.NotificationsEnabled
                     select new { pm.UserId, u.Email }
                 ).ToListAsync();
 

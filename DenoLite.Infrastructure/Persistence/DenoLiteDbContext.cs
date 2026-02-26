@@ -67,6 +67,8 @@ namespace DenoLite.Infrastructure.Persistence
                       .HasDefaultValue(true);
                 entity.Property(u => u.IsEmailVerified)
                       .HasDefaultValue(false);
+                entity.Property(u => u.NotificationsEnabled)
+                      .HasDefaultValue(true);
 
             });
             // ----------------------------

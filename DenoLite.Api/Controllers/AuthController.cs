@@ -113,6 +113,30 @@ namespace DenoLite.Api.Controllers
             return Ok(new { message = "Email changed successfully." });
         }
 
+        [Authorize]
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMe()
+        {
+            var userIdClaim = User.FindFirst("id")?.Value;
+            if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                return Unauthorized("Invalid user token.");
+
+            var notificationsEnabled = await _authService.GetNotificationsEnabledAsync(userId);
+            return Ok(new { notificationsEnabled });
+        }
+
+        [Authorize]
+        [HttpPatch("notifications")]
+        public async Task<IActionResult> UpdateNotifications([FromBody] UpdateNotificationsDto dto)
+        {
+            var userIdClaim = User.FindFirst("id")?.Value;
+            if (string.IsNullOrWhiteSpace(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                return Unauthorized("Invalid user token.");
+
+            await _authService.SetNotificationsEnabledAsync(userId, dto.Enabled);
+            return Ok(new { notificationsEnabled = dto.Enabled });
+        }
+
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {

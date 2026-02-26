@@ -297,9 +297,28 @@ namespace DenoLite.Infrastructure.Services
 
             await _db.SaveChangesAsync();
 
-            // Notify user by email (security warning in case they forgot app open somewhere)
-            if (!string.IsNullOrWhiteSpace(user.Email))
+            // Notify user by email only if they have notifications enabled
+            if (!string.IsNullOrWhiteSpace(user.Email) && user.NotificationsEnabled)
                 _ = SendPasswordChangedEmailAsync(user.Email);
+        }
+
+        public async Task<bool> GetNotificationsEnabledAsync(Guid userId)
+        {
+            var user = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.NotificationsEnabled)
+                .FirstOrDefaultAsync();
+            return user; // default false if not found, but we assume user exists
+        }
+
+        public async Task SetNotificationsEnabledAsync(Guid userId, bool enabled)
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user == null)
+                throw new NotFoundException("User not found.");
+            user.NotificationsEnabled = enabled;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
         }
 
         private async Task SendPasswordChangedEmailAsync(string email)

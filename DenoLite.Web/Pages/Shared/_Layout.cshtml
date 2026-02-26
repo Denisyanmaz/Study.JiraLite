@@ -73,6 +73,12 @@
                                             <i class="me-2">✉️</i> Change Email
                                         </a>
                                     </li>
+                                    <li>
+                                        <div class="dropdown-item-text d-flex align-items-center py-2" onclick="event.stopPropagation()">
+                                            <input type="checkbox" id="notificationsCheckbox" class="form-check-input me-2" title="Receive email notifications (comments, assignments, mentions)" />
+                                            <label for="notificationsCheckbox" class="form-check-label small mb-0">Notifications</label>
+                                        </div>
+                                    </li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <form method="post" asp-page="/Logout" class="d-inline w-100">
@@ -398,6 +404,31 @@
             document.getElementById('btnVerifyEmail').classList.add('d-none');
             pendingNewEmail = '';
         });
+
+        // ============== Notifications preference (profile dropdown) ==============
+        (function initNotificationsCheckbox() {
+            const cb = document.getElementById('notificationsCheckbox');
+            if (!cb) return;
+
+            fetch('/Account?handler=Profile', { credentials: 'include' })
+                .then(r => r.ok ? r.json() : { notificationsEnabled: true })
+                .then(data => { cb.checked = !!data.notificationsEnabled; })
+                .catch(() => { cb.checked = true; });
+
+            cb.addEventListener('change', function() {
+                const enabled = cb.checked;
+                cb.disabled = true;
+                fetch('/Account?handler=UpdateNotifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: enabled })
+                })
+                    .then(r => { if (!r.ok) throw new Error(); })
+                    .catch(() => { cb.checked = !enabled; })
+                    .finally(() => { cb.disabled = false; });
+            });
+        })();
     </script>
 
     @await RenderSectionAsync("Scripts", required: false)

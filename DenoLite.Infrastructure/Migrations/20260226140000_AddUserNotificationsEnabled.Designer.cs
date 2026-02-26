@@ -3,6 +3,7 @@ using System;
 using DenoLite.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DenoLite.Infrastructure.Migrations
 {
     [DbContext(typeof(DenoLiteDbContext))]
-    partial class DenoLiteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260226140000_AddUserNotificationsEnabled")]
+    partial class AddUserNotificationsEnabled
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

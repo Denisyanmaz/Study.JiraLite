@@ -415,7 +415,7 @@ namespace DenoLite.Infrastructure.Services
             try
             {
                 var user = await _context.Users.FindAsync(assigneeId);
-                if (user == null || string.IsNullOrWhiteSpace(user.Email)) return;
+                if (user == null || string.IsNullOrWhiteSpace(user.Email) || !user.NotificationsEnabled) return;
 
                 var subject = $"You have been assigned a task: \"{taskTitle}\"";
                 var body = $"""
@@ -439,6 +439,11 @@ namespace DenoLite.Infrastructure.Services
             try
             {
                 if (string.IsNullOrWhiteSpace(email)) return;
+                var notifsEnabled = await _context.Users.AsNoTracking()
+                    .Where(u => u.Email == email)
+                    .Select(u => u.NotificationsEnabled)
+                    .FirstOrDefaultAsync();
+                if (!notifsEnabled) return;
 
                 var subject = $"Task updated: \"{taskTitle}\"";
                 var safeDiff = System.Net.WebUtility.HtmlEncode(diffMessage ?? string.Empty);
@@ -480,11 +485,11 @@ namespace DenoLite.Infrastructure.Services
                 var project = await _context.Projects.FindAsync(task.ProjectId);
                 var projectName = project?.Name ?? string.Empty;
 
-                // Load active project members with emails
+                // Load active project members with emails (only those who have notifications enabled)
                 var members = await (
                     from pm in _context.ProjectMembers
                     join u in _context.Users on pm.UserId equals u.Id
-                    where pm.ProjectId == task.ProjectId && !string.IsNullOrEmpty(u.Email)
+                    where pm.ProjectId == task.ProjectId && !string.IsNullOrEmpty(u.Email) && u.NotificationsEnabled
                     select new { pm.UserId, u.Email }
                 ).ToListAsync();
 
@@ -552,6 +557,11 @@ namespace DenoLite.Infrastructure.Services
             {
                 if (string.IsNullOrWhiteSpace(email))
                     return;
+                var notifsEnabled = await _context.Users.AsNoTracking()
+                    .Where(u => u.Email == email)
+                    .Select(u => u.NotificationsEnabled)
+                    .FirstOrDefaultAsync();
+                if (!notifsEnabled) return;
 
                 var safeTitle = System.Net.WebUtility.HtmlEncode(task.Title ?? string.Empty);
                 var safeProject = string.IsNullOrWhiteSpace(projectName)
