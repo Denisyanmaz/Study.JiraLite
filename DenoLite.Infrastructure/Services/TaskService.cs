@@ -6,6 +6,8 @@ using DenoLite.Domain.Entities;
 using DenoLite.Domain.Enums;
 using DenoLite.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace DenoLite.Infrastructure.Services
 {
@@ -54,16 +56,30 @@ namespace DenoLite.Infrastructure.Services
             await _context.SaveChangesAsync();
 
             var assigneeEmail = await GetUserEmailAsync(task.AssigneeId);
+
+            // Optional description preview for activity log (plain text)
+            var descriptionPreview = Short(Plain(task.Description), 120);
+            var createdMessage = new StringBuilder();
+            createdMessage.Append(
+                $"Task created: '{task.Title}' (Status: {task.Status}, Priority: {FormatPriority(task.Priority)}, Assignee: {assigneeEmail}, Due: {FormatDue(task.DueDate)})");
+            if (!string.IsNullOrWhiteSpace(descriptionPreview))
+            {
+                createdMessage.Append($" Description: \"{descriptionPreview}\"");
+            }
+
             await _activity.LogAsync(
                 projectId: task.ProjectId,
                 taskId: task.Id,
                 actorId: currentUserId,
                 actionType: "TaskCreated",
-                message: $"Task created: '{task.Title}' (Status: {task.Status}, Priority: {FormatPriority(task.Priority)}, Assignee: {assigneeEmail}, Due: {FormatDue(task.DueDate)})"
+                message: createdMessage.ToString()
             );
 
             // Don't await: email must not block the response (SMTP can hang on Render)
             _ = SendAssignmentEmailAsync(task.AssigneeId, task.Title, task.Id);
+
+            // Mentions: run in-request so we can safely use DbContext and log activity
+            await NotifyMentionedUsersAsync(task, currentUserId);
 
             return task;
         }
@@ -120,6 +136,7 @@ namespace DenoLite.Infrastructure.Services
             var beforeTitle = task.Title;
             var beforeStatus = task.Status;
             var beforePriority = task.Priority;
+            var beforeDescription = task.Description;
             var beforeAssignee = task.AssigneeId;
             var beforeDue = task.DueDate;
 
@@ -148,6 +165,13 @@ namespace DenoLite.Infrastructure.Services
             if (beforePriority != task.Priority)
                 changes.Add($"Priority {P(beforePriority)} → {P(task.Priority)}");
 
+            if (!string.Equals(Plain(beforeDescription), Plain(task.Description), StringComparison.Ordinal))
+            {
+                var beforeShort = Short(Plain(beforeDescription), 80);
+                var afterShort  = Short(Plain(task.Description), 80);
+                changes.Add($"Description \"{beforeShort}\" → \"{afterShort}\"");
+            }
+
             if (beforeAssignee != task.AssigneeId)
                 changes.Add($"Assignee {await GetUserEmailAsync(beforeAssignee)} → {await GetUserEmailAsync(task.AssigneeId)}");
 
@@ -168,6 +192,17 @@ namespace DenoLite.Infrastructure.Services
 
             if (beforeAssignee != task.AssigneeId)
                 _ = SendAssignmentEmailAsync(task.AssigneeId, task.Title, task.Id);
+
+            // Notify current assignee about the update (diff-based message).
+            // Skip if the actor is the assignee themselves to avoid noisy self-emails.
+            if (task.AssigneeId != Guid.Empty && task.AssigneeId != currentUserId)
+            {
+                var assigneeEmailForUpdate = await GetUserEmailAsync(task.AssigneeId);
+                _ = SendTaskUpdateEmailAsync(assigneeEmailForUpdate, task.Title, task.Id, message);
+            }
+
+            // Mentions: run in-request so we can safely use DbContext
+            await NotifyMentionedUsersAsync(task, currentUserId);
 
             return task;
         }
@@ -276,9 +311,17 @@ namespace DenoLite.Infrastructure.Services
                 task.Status = status;
                 await _context.SaveChangesAsync();
 
-                // optional: activity log
-                await _activity.LogAsync(task.ProjectId, task.Id, currentUserId, "TaskStatusChanged",
-                    $"Status changed: {beforeStatus} → {task.Status}.");
+                var diffMessage = $"Status changed: {beforeStatus} → {task.Status}.";
+
+                // activity log
+                await _activity.LogAsync(task.ProjectId, task.Id, currentUserId, "TaskStatusChanged", diffMessage);
+
+                // Notify assignee (if someone else changed the status)
+                if (task.AssigneeId != Guid.Empty && task.AssigneeId != currentUserId)
+                {
+                    var assigneeEmailForStatus = await GetUserEmailAsync(task.AssigneeId);
+                    _ = SendTaskUpdateEmailAsync(assigneeEmailForStatus, task.Title, task.Id, diffMessage);
+                }
             }
 
             return task;
@@ -315,6 +358,166 @@ namespace DenoLite.Infrastructure.Services
             }
         }
 
+        private async Task SendTaskUpdateEmailAsync(string email, string taskTitle, Guid taskId, string diffMessage)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(email)) return;
+
+                var subject = $"Task updated: \"{taskTitle}\"";
+                var safeDiff = System.Net.WebUtility.HtmlEncode(diffMessage ?? string.Empty);
+
+                var body = $"""
+                    <p>Hi,</p>
+                    <p>A task assigned to you was updated in <strong>DenoLite</strong>:</p>
+                    <p><strong>{System.Net.WebUtility.HtmlEncode(taskTitle)}</strong></p>
+                    <p style="white-space:pre-wrap;">{safeDiff}</p>
+                    <p><a href="/Tasks/Details/{taskId}?tab=overview">View task</a></p>
+                    <p>— The DenoLite Team</p>
+                    """;
+
+                await _emailSender.SendAsync(email, subject, body);
+            }
+            catch
+            {
+                // update email failure must never break task operations
+            }
+        }
+
+        /// <summary>
+        /// Finds @mentions in the task description, resolves them to project members by email local-part,
+        /// and sends notification emails. Best-effort, non-blocking.
+        /// </summary>
+        private async Task NotifyMentionedUsersAsync(TaskItem task, Guid actorId)
+        {
+            // Nothing to do if there's no description
+            if (string.IsNullOrWhiteSpace(task.Description))
+                return;
+
+            var handles = ExtractMentionHandles(task.Description);
+            if (handles.Count == 0)
+                return;
+
+            try
+            {
+                // Load project name (optional, for nicer subject/body)
+                var project = await _context.Projects.FindAsync(task.ProjectId);
+                var projectName = project?.Name ?? string.Empty;
+
+                // Load active project members with emails
+                var members = await (
+                    from pm in _context.ProjectMembers
+                    join u in _context.Users on pm.UserId equals u.Id
+                    where pm.ProjectId == task.ProjectId && !string.IsNullOrEmpty(u.Email)
+                    select new { pm.UserId, u.Email }
+                ).ToListAsync();
+
+                if (members.Count == 0)
+                    return;
+
+                var handleSet = new HashSet<string>(handles, StringComparer.OrdinalIgnoreCase);
+                var targets = new Dictionary<Guid, string>();
+
+                foreach (var m in members)
+                {
+                    if (string.IsNullOrWhiteSpace(m.Email)) continue;
+
+                    var atIndex = m.Email.IndexOf('@');
+                    var localPart = atIndex > 0 ? m.Email[..atIndex] : m.Email;
+
+                    if (handleSet.Contains(localPart) && m.UserId != actorId)
+                    {
+                        // Distinct per user
+                        targets[m.UserId] = m.Email;
+                    }
+                }
+
+                if (targets.Count == 0)
+                    return;
+
+                foreach (var (_, email) in targets)
+                {
+                    _ = SendMentionEmailAsync(email, task, projectName);
+                }
+            }
+            catch
+            {
+                // Mention notifications are best-effort and must never break task flows
+            }
+        }
+
+        private static List<string> ExtractMentionHandles(string? text)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(text))
+                return result;
+
+            // Look for patterns like "@denowar92" in the (HTML) description.
+            var matches = Regex.Matches(text, @"@([a-zA-Z0-9._%+-]+)");
+            foreach (Match match in matches)
+            {
+                if (match.Groups.Count > 1)
+                {
+                    var handle = match.Groups[1].Value;
+                    if (!string.IsNullOrWhiteSpace(handle) &&
+                        !result.Contains(handle, StringComparer.OrdinalIgnoreCase))
+                    {
+                        result.Add(handle);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private async Task SendMentionEmailAsync(string email, TaskItem task, string? projectName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(email))
+                    return;
+
+                var safeTitle = System.Net.WebUtility.HtmlEncode(task.Title ?? string.Empty);
+                var safeProject = string.IsNullOrWhiteSpace(projectName)
+                    ? string.Empty
+                    : System.Net.WebUtility.HtmlEncode(projectName);
+
+                var subject = string.IsNullOrWhiteSpace(safeProject)
+                    ? $"You were mentioned in task \"{safeTitle}\""
+                    : $"You were mentioned in \"{safeTitle}\" ({safeProject})";
+
+                var bodyBuilder = new StringBuilder();
+                bodyBuilder.Append("<p>Hi,</p>");
+                bodyBuilder.Append("<p>You were mentioned in a task in <strong>DenoLite</strong>");
+                if (!string.IsNullOrWhiteSpace(safeProject))
+                {
+                    bodyBuilder.Append($" (project <strong>{safeProject}</strong>)");
+                }
+                bodyBuilder.Append(":</p>");
+
+                bodyBuilder.Append($"<p><strong>{safeTitle}</strong></p>");
+
+                if (!string.IsNullOrWhiteSpace(task.Description))
+                {
+                    // Task description is already HTML from the editor; include as-is.
+                    bodyBuilder.Append("<hr/>");
+                    bodyBuilder.Append("<div>");
+                    bodyBuilder.Append(task.Description);
+                    bodyBuilder.Append("</div>");
+                }
+
+                bodyBuilder.Append(
+                    $@"<p><a href=""/Tasks/Details/{task.Id}?tab=overview"">View task</a></p>");
+                bodyBuilder.Append("<p>— The DenoLite Team</p>");
+
+                await _emailSender.SendAsync(email, subject, bodyBuilder.ToString());
+            }
+            catch
+            {
+                // Mention email failure must never break task operations
+            }
+        }
+
         private static string FormatPriority(int p) => $"P{p}";
 
         private static string FormatDue(DateTime? due)
@@ -325,6 +528,15 @@ namespace DenoLite.Infrastructure.Services
             if (string.IsNullOrWhiteSpace(text)) return "";
             text = text.Trim();
             return text.Length <= max ? text : text.Substring(0, max) + "…";
+        }
+        private static string Plain(string? html)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return "";
+            // Very small helper to strip HTML tags for logs
+            return System.Text.RegularExpressions.Regex.Replace(html, "<.*?>", string.Empty)
+                .Replace("\r", string.Empty)
+                .Replace("\n", " ")
+                .Trim();
         }
         private static DateTime? AsUtc(DateTime? dt)
         {

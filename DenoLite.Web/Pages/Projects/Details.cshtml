@@ -528,6 +528,124 @@ else
     <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
     <script>
         (function () {
+            // Members of this project for mention suggestions in the create-task modal
+            window.denoLiteProjectMentionMembers = @Html.Raw(
+                System.Text.Json.JsonSerializer.Serialize(
+                    Model.AssigneeEmailById
+                        .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Value))
+                        .Select(kvp => new {
+                            id = kvp.Key,
+                            email = kvp.Value!,
+                            handle = kvp.Value!.Contains("@")
+                                ? kvp.Value!.Substring(0, kvp.Value!.IndexOf("@"))
+                                : kvp.Value!
+                        })
+                )
+            );
+
+            function initMentionSupport(quill, members, editorElement) {
+                if (!quill || !editorElement || !Array.isArray(members) || members.length === 0) return;
+
+                const container = editorElement.parentElement || editorElement;
+                if (!container) return;
+                if (!container.style.position) {
+                    container.style.position = "relative";
+                }
+
+                const menu = document.createElement("div");
+                menu.className = "mention-suggestions list-group position-absolute bg-white border rounded shadow-sm";
+                menu.style.zIndex = "2000";
+                menu.style.display = "none";
+                menu.style.minWidth = "180px";
+                container.appendChild(menu);
+
+                let mentionStartIndex = null;
+
+                function closeMenu() {
+                    menu.style.display = "none";
+                    menu.innerHTML = "";
+                    mentionStartIndex = null;
+                }
+
+                function openMenu(bounds) {
+                    menu.innerHTML = "";
+                    members.forEach(m => {
+                        const item = document.createElement("button");
+                        item.type = "button";
+                        item.className = "list-group-item list-group-item-action py-1 px-2";
+                        const handleText = (m.handle || "");
+                        item.textContent = handleText;
+                        item.addEventListener("click", (ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            applyMention(m.handle);
+                        });
+                        menu.appendChild(item);
+                    });
+
+                    menu.style.left = (bounds.left || 0) + "px";
+                    menu.style.top = ((bounds.bottom || bounds.top || 0) + 4) + "px";
+                    menu.style.display = "block";
+                }
+
+                function applyMention(handle) {
+                    if (!handle) {
+                        closeMenu();
+                        return;
+                    }
+                    const sel = quill.getSelection(true);
+                    if (!sel) {
+                        closeMenu();
+                        return;
+                    }
+                    let index = sel.index;
+                    if (index > 0) {
+                        const prev = quill.getText(index - 1, 1);
+                        const prevCode = prev && prev.length ? prev.charCodeAt(0) : 0;
+                        if (prevCode === 64) {
+                            quill.deleteText(index - 1, 1, "user");
+                            index = index - 1;
+                        }
+                    }
+                    const atSign = String.fromCharCode(64);
+                    quill.insertText(index, atSign + handle, { bold: true }, "user");
+                    quill.insertText(index + handle.length + 1, " ", "user");
+                    quill.setSelection(index + handle.length + 2, 0, "user");
+                    closeMenu();
+                }
+
+                quill.on("text-change", function (_, __, source) {
+                    if (source !== "user") return;
+                    const sel = quill.getSelection();
+                    if (!sel) {
+                        closeMenu();
+                        return;
+                    }
+                    const index = sel.index;
+                    if (index <= 0) {
+                        closeMenu();
+                        return;
+                    }
+
+                    const ch = quill.getText(index - 1, 1);
+                    const code = ch && ch.length ? ch.charCodeAt(0) : 0;
+                    if (code !== 64) {
+                        if (menu.style.display !== "none") {
+                            closeMenu();
+                        }
+                        return;
+                    }
+
+                    mentionStartIndex = index - 1;
+                    const bounds = quill.getBounds(index);
+                    openMenu(bounds);
+                });
+
+                quill.root.addEventListener("blur", () => {
+                    setTimeout(closeMenu, 150);
+                });
+            }
+
             let createTaskQuill = null;
             let fallbackToolbarInited = false;
             const modalEl = document.getElementById("createTaskModal");
@@ -628,6 +746,10 @@ else
                         hiddenInput.value = createTaskQuill.root.innerHTML;
                     });
                     if (fallbackWrap) fallbackWrap.classList.add("d-none");
+
+                    if (window.denoLiteProjectMentionMembers) {
+                        initMentionSupport(createTaskQuill, window.denoLiteProjectMentionMembers, editorEl);
+                    }
                 } catch (e) {
                     useFallbackEditor();
                     initFallbackToolbar();

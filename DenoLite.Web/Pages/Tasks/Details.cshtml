@@ -35,6 +35,21 @@
         projectId: "@Model.Task?.ProjectId",
         title: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Task?.Title ?? ""))
     };
+
+    // Members of this task's project for mention suggestions (handle = email local-part)
+    window.denoLiteTaskMentionMembers = @Html.Raw(
+        System.Text.Json.JsonSerializer.Serialize(
+            Model.AssigneeEmailById
+                .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Value))
+                .Select(kvp => new {
+                    id = kvp.Key,
+                    email = kvp.Value!,
+                    handle = kvp.Value!.Contains("@")
+                        ? kvp.Value!.Substring(0, kvp.Value!.IndexOf("@"))
+                        : kvp.Value!
+                })
+        )
+    );
 </script>
 
 @if (string.IsNullOrWhiteSpace(Model.Error))
@@ -271,11 +286,13 @@
                 {
                     <div class="alert alert-danger" style="white-space:pre-wrap;">@Model.CommentError</div>
                 }
-                <form method="post" asp-page-handler="AddComment" asp-route-id="@Model.Id" asp-route-tab="comments">
+                <form method="post" asp-page-handler="AddComment" asp-route-id="@Model.Id" asp-route-tab="comments" id="addCommentForm">
                     <div class="mb-2">
                         <textarea class="form-control" rows="3" maxlength="400"
                                   asp-for="AddCommentInput.Body"
-                                  placeholder="Write a comment..."></textarea>
+                                  placeholder="Write a comment..."
+                                  id="addCommentBody"></textarea>
+                        <div id="addCommentEditor" class="border rounded bg-white" style="min-height: 100px; max-height: 220px; overflow-y: auto;"></div>
                         <span class="text-danger" asp-validation-for="AddCommentInput.Body"></span>
                     </div>
 
@@ -305,7 +322,7 @@
                                         @c.CreatedAt.ToString("yyyy-MM-dd HH:mm")
                                     </div>
                                 </div>
-                                <div class="mt-2">@c.Body</div>
+                                <div class="mt-2">@Html.Raw(c.Body)</div>
                             </div>
                         }
                     </div>
@@ -389,6 +406,111 @@
     <script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
     <script>
         (function () {
+            function initMentionSupport(quill, members, editorElement) {
+                if (!quill || !editorElement || !Array.isArray(members) || members.length === 0) return;
+
+                const container = editorElement.parentElement || editorElement;
+                if (!container) return;
+                if (!container.style.position) {
+                    container.style.position = "relative";
+                }
+
+                const menu = document.createElement("div");
+                menu.className = "mention-suggestions list-group position-absolute bg-white border rounded shadow-sm";
+                menu.style.zIndex = "2000";
+                menu.style.display = "none";
+                menu.style.minWidth = "180px";
+                container.appendChild(menu);
+
+                let mentionStartIndex = null;
+
+                function closeMenu() {
+                    menu.style.display = "none";
+                    menu.innerHTML = "";
+                    mentionStartIndex = null;
+                }
+
+                function openMenu(bounds) {
+                    menu.innerHTML = "";
+                    members.forEach(m => {
+                        const item = document.createElement("button");
+                        item.type = "button";
+                        item.className = "list-group-item list-group-item-action py-1 px-2";
+                        const handleText = (m.handle || "");
+                        item.textContent = handleText;
+                        item.addEventListener("click", (ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            applyMention(m.handle);
+                        });
+                        menu.appendChild(item);
+                    });
+
+                    menu.style.left = (bounds.left || 0) + "px";
+                    menu.style.top = ((bounds.bottom || bounds.top || 0) + 4) + "px";
+                    menu.style.display = "block";
+                }
+
+                function applyMention(handle) {
+                    if (!handle) {
+                        closeMenu();
+                        return;
+                    }
+                    const sel = quill.getSelection(true);
+                    if (!sel) {
+                        closeMenu();
+                        return;
+                    }
+                    let index = sel.index;
+                    if (index > 0) {
+                        const prev = quill.getText(index - 1, 1);
+                        const prevCode = prev && prev.length ? prev.charCodeAt(0) : 0;
+                        if (prevCode === 64) {
+                            quill.deleteText(index - 1, 1, "user");
+                            index = index - 1;
+                        }
+                    }
+                    const atSign = String.fromCharCode(64);
+                    quill.insertText(index, atSign + handle, { bold: true }, "user");
+                    quill.insertText(index + handle.length + 1, " ", "user");
+                    quill.setSelection(index + handle.length + 2, 0, "user");
+                    closeMenu();
+                }
+
+                quill.on("text-change", function (_, __, source) {
+                    if (source !== "user") return;
+                    const sel = quill.getSelection();
+                    if (!sel) {
+                        closeMenu();
+                        return;
+                    }
+                    const index = sel.index;
+                    if (index <= 0) {
+                        closeMenu();
+                        return;
+                    }
+
+                    const ch = quill.getText(index - 1, 1);
+                    const code = ch && ch.length ? ch.charCodeAt(0) : 0;
+                    if (code !== 64) {
+                        // If user moved away, just close any open menu
+                        if (menu.style.display !== "none") {
+                            closeMenu();
+                        }
+                        return;
+                    }
+
+                    mentionStartIndex = index - 1;
+                    const bounds = quill.getBounds(index);
+                    openMenu(bounds);
+                });
+
+                quill.root.addEventListener("blur", () => {
+                    // Delay slightly so click on menu can register
+                    setTimeout(closeMenu, 150);
+                });
+            }
+
             const editorEl = document.getElementById("taskDetailsDescriptionEditor");
             const fallbackWrap = document.getElementById("taskDetailsDescriptionFallbackWrap");
             const fallbackEd = document.getElementById("taskDetailsDescriptionFallback");
@@ -437,36 +559,85 @@
                 updateTaskDetailsToolbarState();
             }
 
-            if (!editorEl) return;
-
-            if (typeof Quill === "undefined") {
-                useTaskDetailsFallback();
-                initTaskDetailsFallbackToolbar();
-                return;
-            }
-            try {
-                window.taskDetailsQuill = new Quill(editorEl, {
-                    theme: "snow",
-                    placeholder: "Describe the task…",
-                    modules: {
-                        toolbar: [
-                            ["bold", "italic", "underline", "strike"],
-                            [{ list: "ordered" }, { list: "bullet" }],
-                            ["link"],
-                            ["clean"]
-                        ]
-                    }
-                });
+            if (editorEl && typeof Quill !== "undefined") {
                 try {
-                    window.taskDetailsQuill.root.innerHTML = initialDescription;
-                } catch (_) {
-                    window.taskDetailsQuill.setText(initialDescription);
+                    window.taskDetailsQuill = new Quill(editorEl, {
+                        theme: "snow",
+                        placeholder: "Describe the task…",
+                        modules: {
+                            toolbar: [
+                                ["bold", "italic", "underline", "strike"],
+                                [{ list: "ordered" }, { list: "bullet" }],
+                                ["link"],
+                                ["clean"]
+                            ]
+                        }
+                    });
+                    try {
+                        window.taskDetailsQuill.root.innerHTML = initialDescription;
+                    } catch (_) {
+                        window.taskDetailsQuill.setText(initialDescription);
+                    }
+                    if (fallbackWrap) fallbackWrap.classList.add("d-none");
+
+                    // Enable mention suggestions based on project members
+                    if (window.denoLiteTaskMentionMembers) {
+                        initMentionSupport(window.taskDetailsQuill, window.denoLiteTaskMentionMembers, editorEl);
+                    }
+                } catch (e) {
+                    useTaskDetailsFallback();
+                    initTaskDetailsFallbackToolbar();
                 }
-                if (fallbackWrap) fallbackWrap.classList.add("d-none");
-            } catch (e) {
-                useTaskDetailsFallback();
-                initTaskDetailsFallbackToolbar();
+            } else {
+                if (!editorEl || typeof Quill === "undefined") {
+                    useTaskDetailsFallback();
+                    initTaskDetailsFallbackToolbar();
+                }
             }
+
+            // -------------------- Comments Quill (with mentions) --------------------
+            (function initCommentsQuill() {
+                const bodyTextarea = document.getElementById("addCommentBody");
+                const editor = document.getElementById("addCommentEditor");
+                const form = document.getElementById("addCommentForm");
+                if (!bodyTextarea || !editor || !form) return;
+                if (typeof Quill === "undefined") return;
+
+                try {
+                    const commentQuill = new Quill(editor, {
+                        theme: "snow",
+                        placeholder: "Write a comment…",
+                        modules: {
+                            toolbar: [
+                                ["bold", "italic", "underline", "strike"],
+                                [{ list: "ordered" }, { list: "bullet" }],
+                                ["link"],
+                                ["clean"]
+                            ]
+                        }
+                    });
+
+                    if (bodyTextarea.value) {
+                        try {
+                            commentQuill.root.innerHTML = bodyTextarea.value;
+                        } catch (_) {
+                            commentQuill.setText(bodyTextarea.value);
+                        }
+                    }
+
+                    bodyTextarea.classList.add("d-none");
+
+                    if (window.denoLiteTaskMentionMembers) {
+                        initMentionSupport(commentQuill, window.denoLiteTaskMentionMembers, editor);
+                    }
+
+                    form.addEventListener("submit", function () {
+                        bodyTextarea.value = commentQuill.root.innerHTML;
+                    });
+                } catch {
+                    // If Quill fails for comments, fall back to plain textarea
+                }
+            })();
         })();
     </script>
 }
