@@ -751,27 +751,31 @@ namespace DenoLite.Web.Pages.Projects
                         : t.AssigneeId.ToString();
                     var memberLeft = !CurrentMemberIds.Contains(t.AssigneeId);
 
-                    var statusSelect = $@"
-<select class=""form-select form-select-sm quick-status""
-        data-task-id=""{t.Id}"" style=""max-width: 140px;"">
-  <option value=""Todo"" {(t.Status == DenoTaskStatus.Todo ? "selected" : "")}>Todo</option>
-  <option value=""InProgress"" {(t.Status == DenoTaskStatus.InProgress ? "selected" : "")}>InProgress</option>
-  <option value=""Done"" {(t.Status == DenoTaskStatus.Done ? "selected" : "")}>Done</option>
-</select>";
+                    var tagsHtml = t.Tags != null && t.Tags.Count > 0
+                        ? string.Join(" ", t.Tags.Select(tag => $"<span class=\"badge task-tag\" data-tag-id=\"{tag.Id}\" data-task-id=\"{t.Id}\" style=\"background-color:{System.Net.WebUtility.HtmlEncode(tag.Color)};color:#fff;\">{System.Net.WebUtility.HtmlEncode(tag.Label)}</span>"))
+                        : "";
 
                     var encodedTitle = System.Net.WebUtility.HtmlEncode(t.Title);
                     var descriptionHtml = SanitizeTaskDescription(t.Description);
-                    
+
+                    var tagButtonsHtml = $@"<div class=""d-flex flex-wrap align-items-center gap-1 mb-2"">
+  <button type=""button"" class=""btn btn-sm btn-outline-primary add-tags-btn"" data-task-id=""{t.Id}"" title=""Add a tag"">Add Tags</button>
+  {(t.Tags != null && t.Tags.Count > 0 ? $@"<button type=""button"" class=""btn btn-sm btn-outline-danger remove-tags-btn"" data-task-id=""{t.Id}"" title=""Click then click a tag to remove it"">Remove tags</button>" : "")}
+</div>";
+
                     sb.AppendLine($@"
 <a href=""/Tasks/Details/{t.Id}?tab=overview"" class=""text-decoration-none text-dark task-link""
    draggable=""true"" data-task-id=""{t.Id}"" data-status=""{t.Status}"">
   <div class=""card mb-3 shadow-sm task-card"" style=""transition: transform 0.2s, box-shadow 0.2s;"">
     <div class=""card-body p-3"">
-      <!-- Title Section -->
-      <div class=""mb-2"">
-        <h6 class=""card-title mb-0 fw-semibold"" style=""line-height: 1.4; word-wrap: break-word; word-break: break-word;"" title=""{System.Net.WebUtility.HtmlEncode(t.Title ?? "")}"">
+      <!-- Title + Tags Row: title left, tags top-right -->
+      <div class=""d-flex justify-content-between align-items-start gap-2 mb-2"">
+        <h6 class=""card-title mb-0 fw-semibold flex-grow-1"" style=""line-height: 1.4; word-wrap: break-word; word-break: break-word;"" title=""{System.Net.WebUtility.HtmlEncode(t.Title ?? "")}"">
           {encodedTitle}
         </h6>
+        <div class=""d-flex flex-wrap gap-1 justify-content-end"" style=""min-width: 0;"">
+          {tagsHtml}
+        </div>
       </div>
 
       <!-- Description Section -->
@@ -786,10 +790,8 @@ namespace DenoLite.Web.Pages.Projects
         <span class=""badge {dueCss}"" title=""Due date: {dueText}"">{dueText}</span>
       </div>
 
-      <!-- Status Dropdown -->
-      <div class=""mb-2"">
-        {statusSelect}
-      </div>
+      <!-- Add Tags / Remove tags buttons (replaces status dropdown) -->
+      {tagButtonsHtml}
 
       <!-- Assignee Section -->
       <div class=""border-top pt-2 mt-2"">
