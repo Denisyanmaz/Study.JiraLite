@@ -68,6 +68,19 @@ namespace DenoLite.Api.Controllers
             return Ok(task);
         }
 
+        [HttpPost("{id}/tags")]
+        public async Task<IActionResult> AddTag(Guid id, [FromBody] AddTaskTagDto dto)
+        {
+            var tag = await _taskService.AddTaskTagAsync(id, dto, GetCurrentUserId());
+            return Ok(tag);
+        }
+
+        [HttpDelete("{id}/tags/{tagId}")]
+        public async Task<IActionResult> RemoveTag(Guid id, Guid tagId)
+        {
+            await _taskService.RemoveTaskTagAsync(id, tagId, GetCurrentUserId());
+            return NoContent();
+        }
 
         private Guid GetCurrentUserId()
         {

@@ -276,6 +276,53 @@ else
                 </div>
             </div>
         </div>
+
+        <!-- Task Tags Modal -->
+        <div class="modal fade" id="taskTagModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add tags</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="taskTagModalTaskId" />
+                        <input type="hidden" id="taskTagModalColor" value="#6c757d" />
+
+                        <div class="mb-3">
+                            <label for="taskTagModalName" class="form-label small">Tag name</label>
+                            <input id="taskTagModalName"
+                                   type="text"
+                                   class="form-control"
+                                   maxlength="20"
+                                   placeholder="Enter tag name (max 20 characters)" />
+                            <div class="form-text">You can add multiple tags before saving.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small d-block mb-1">Tag color</label>
+                            <div id="taskTagModalPalette" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <button type="button" id="taskTagModalAdd" class="btn btn-sm btn-outline-primary">
+                                Add to list
+                            </button>
+                        </div>
+
+                        <div class="mb-1 small text-muted">Tags to create:</div>
+                        <ul id="taskTagModalList" class="list-group small mb-0"></ul>
+                        <div id="taskTagModalEmptyHint" class="text-muted small mt-2">
+                            No tags added yet. Enter a name, choose a color, and click "Add to list".
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="taskTagModalSave" disabled>Save tags</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
 
     @* ===================== ACTIVITY TAB ===================== *@
@@ -841,30 +888,246 @@ else
                     setTimeout(() => toast.classList.add("d-none"), 4000);
                 }
 
-                // Quick status dropdown
-                document.querySelectorAll(".quick-status").forEach(sel => {
-                  sel.addEventListener("change", async (e) => {
-                    const taskId = sel.dataset.taskId;
-                    const targetStatus = sel.value;
+                // Tag colors for the dropdown
+                const TAG_COLORS = [
+                    { value: "#dc3545", label: "Red" },
+                    { value: "#fd7e14", label: "Orange" },
+                    { value: "#ffc107", label: "Yellow" },
+                    { value: "#198754", label: "Green" },
+                    { value: "#0d6efd", label: "Blue" },
+                    { value: "#6f42c1", label: "Purple" },
+                    { value: "#d63384", label: "Pink" },
+                    { value: "#20c997", label: "Teal" },
+                    { value: "#6c757d", label: "Gray" }
+                ];
 
-                    const resp = await fetch("/Projects/UpdateTaskStatus", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        taskId: taskId,
-                        status: targetStatus,
-                        projectId: "@Model.ProjectId"
-                      })
+                let removalModeTaskId = null;
+                let pendingTags = [];
+
+                // Tag modal elements
+                const tagModalEl = document.getElementById("taskTagModal");
+                const tagModalTaskIdInput = document.getElementById("taskTagModalTaskId");
+                const tagModalColorInput = document.getElementById("taskTagModalColor");
+                const tagModalNameInput = document.getElementById("taskTagModalName");
+                const tagModalPalette = document.getElementById("taskTagModalPalette");
+                const tagModalList = document.getElementById("taskTagModalList");
+                const tagModalEmptyHint = document.getElementById("taskTagModalEmptyHint");
+                const tagModalAddBtn = document.getElementById("taskTagModalAdd");
+                const tagModalSaveBtn = document.getElementById("taskTagModalSave");
+                const tagModal = tagModalEl ? new bootstrap.Modal(tagModalEl) : null;
+
+                function exitRemovalMode() {
+                    const doneBtns = document.querySelectorAll(".remove-tags-btn.done-mode");
+                    doneBtns.forEach(b => {
+                        b.textContent = "Remove tags";
+                        b.classList.remove("done-mode", "btn-success");
+                        b.classList.add("btn-outline-danger");
                     });
+                    removalModeTaskId = null;
+                }
 
-                    if (!resp.ok) {
-                      const text = await resp.text();
-                      showError(text || "Status update failed.");
-                      return;
+                function isRemovalModeFor(taskId) {
+                    return removalModeTaskId === taskId;
+                }
+
+                function resetTagModal(taskId) {
+                    if (!tagModalTaskIdInput || !tagModalNameInput || !tagModalList || !tagModalEmptyHint || !tagModalSaveBtn) return;
+                    tagModalTaskIdInput.value = taskId || "";
+                    tagModalNameInput.value = "";
+                    pendingTags = [];
+                    tagModalList.innerHTML = "";
+                    tagModalEmptyHint.classList.remove("d-none");
+                    tagModalSaveBtn.disabled = true;
+                    if (tagModalColorInput && TAG_COLORS.length > 0) {
+                        tagModalColorInput.value = TAG_COLORS[0].value;
                     }
+                    // Clear palette selection
+                    if (tagModalPalette) {
+                        tagModalPalette.querySelectorAll(".tag-color-swatch").forEach(btn => {
+                            btn.classList.remove("border-2", "border-dark");
+                        });
+                        const first = tagModalPalette.querySelector(".tag-color-swatch");
+                        if (first) first.classList.add("border-2", "border-dark");
+                    }
+                }
 
-                    location.reload();
-                  });
+                function ensureTagPalette() {
+                    if (!tagModalPalette || tagModalPalette.childElementCount > 0) return;
+                    TAG_COLORS.forEach(c => {
+                        const btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.className = "tag-color-swatch btn btn-sm p-0 border rounded-circle";
+                        btn.style.width = "24px";
+                        btn.style.height = "24px";
+                        btn.style.backgroundColor = c.value;
+                        btn.setAttribute("aria-label", c.label);
+                        btn.dataset.color = c.value;
+                        btn.addEventListener("click", () => {
+                            if (!tagModalColorInput) return;
+                            tagModalColorInput.value = c.value;
+                            tagModalPalette.querySelectorAll(".tag-color-swatch").forEach(b => {
+                                b.classList.remove("border-2", "border-dark");
+                            });
+                            btn.classList.add("border-2", "border-dark");
+                        });
+                        tagModalPalette.appendChild(btn);
+                    });
+                }
+
+                function renderPendingTags() {
+                    if (!tagModalList || !tagModalEmptyHint || !tagModalSaveBtn) return;
+                    tagModalList.innerHTML = "";
+                    if (pendingTags.length === 0) {
+                        tagModalEmptyHint.classList.remove("d-none");
+                        tagModalSaveBtn.disabled = true;
+                        return;
+                    }
+                    tagModalEmptyHint.classList.add("d-none");
+                    tagModalSaveBtn.disabled = false;
+                    pendingTags.forEach((t, idx) => {
+                        const li = document.createElement("li");
+                        li.className = "list-group-item d-flex justify-content-between align-items-center";
+                        const left = document.createElement("div");
+                        left.className = "d-flex align-items-center gap-2";
+                        const swatch = document.createElement("span");
+                        swatch.style.display = "inline-block";
+                        swatch.style.width = "16px";
+                        swatch.style.height = "16px";
+                        swatch.style.borderRadius = "50%";
+                        swatch.style.backgroundColor = t.color;
+                        const labelSpan = document.createElement("span");
+                        labelSpan.textContent = t.label;
+                        left.appendChild(swatch);
+                        left.appendChild(labelSpan);
+                        const removeBtn = document.createElement("button");
+                        removeBtn.type = "button";
+                        removeBtn.className = "btn btn-sm btn-outline-danger";
+                        removeBtn.textContent = "×";
+                        removeBtn.addEventListener("click", () => {
+                            pendingTags.splice(idx, 1);
+                            renderPendingTags();
+                        });
+                        li.appendChild(left);
+                        li.appendChild(removeBtn);
+                        tagModalList.appendChild(li);
+                    });
+                }
+
+                if (tagModalAddBtn) {
+                    tagModalAddBtn.addEventListener("click", () => {
+                        if (!tagModalNameInput || !tagModalColorInput) return;
+                        const label = (tagModalNameInput.value || "").trim();
+                        if (!label) return;
+                        const color = tagModalColorInput.value || "#6c757d";
+                        pendingTags.push({ label, color });
+                        tagModalNameInput.value = "";
+                        renderPendingTags();
+                        tagModalNameInput.focus();
+                    });
+                }
+
+                if (tagModalSaveBtn) {
+                    tagModalSaveBtn.addEventListener("click", async () => {
+                        if (!tagModalTaskIdInput || pendingTags.length === 0) {
+                            tagModal?.hide();
+                            return;
+                        }
+                        const taskId = tagModalTaskIdInput.value;
+                        try {
+                            for (const t of pendingTags) {
+                                const resp = await fetch("/Projects/AddTaskTag", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        taskId: taskId,
+                                        projectId: "@Model.ProjectId",
+                                        label: t.label,
+                                        color: t.color
+                                    })
+                                });
+                                if (!resp.ok) {
+                                    const text = await resp.text();
+                                    showError(text || "Failed to add tag(s).");
+                                    return;
+                                }
+                            }
+                            tagModal?.hide();
+                            location.reload();
+                        } catch {
+                            showError("Failed to add tag(s).");
+                        }
+                    });
+                }
+
+                // Add Tags: open modal
+                document.querySelectorAll(".add-tags-btn").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!tagModal) return;
+                        const taskId = btn.dataset.taskId;
+                        ensureTagPalette();
+                        resetTagModal(taskId);
+                        tagModal.show();
+                        tagModalNameInput?.focus();
+                    });
+                });
+
+                // Remove tags / Done button
+                document.querySelectorAll(".remove-tags-btn").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const taskId = btn.dataset.taskId;
+                        if (btn.classList.contains("done-mode")) {
+                            exitRemovalMode();
+                            return;
+                        }
+                        removalModeTaskId = taskId;
+                        document.querySelectorAll(".remove-tags-btn").forEach(b => {
+                            if (b.dataset.taskId === taskId) {
+                                b.textContent = "Done";
+                                b.classList.add("done-mode", "btn-success");
+                                b.classList.remove("btn-outline-danger");
+                            } else {
+                                b.classList.remove("done-mode", "btn-success");
+                                b.classList.add("btn-outline-danger");
+                            }
+                        });
+                    });
+                });
+
+                // When in removal mode, clicking a tag removes it
+                document.querySelectorAll(".task-tag").forEach(tagEl => {
+                    tagEl.addEventListener("click", async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const taskId = tagEl.dataset.taskId;
+                        const tagId = tagEl.dataset.tagId;
+                        if (!isRemovalModeFor(taskId)) return;
+                        const resp = await fetch("/Projects/RemoveTaskTag", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                taskId: taskId,
+                                tagId: tagId,
+                                projectId: "@Model.ProjectId"
+                            })
+                        });
+                        if (!resp.ok) {
+                            const text = await resp.text();
+                            showError(text || "Failed to remove tag.");
+                            return;
+                        }
+                        const card = tagEl.closest(".task-card");
+                        tagEl.remove();
+                        const remainingTags = card ? card.querySelectorAll(".task-tag") : [];
+                        if (remainingTags.length === 0) {
+                            const removeBtn = card?.querySelector(".remove-tags-btn");
+                            if (removeBtn) removeBtn.remove();
+                            exitRemovalMode();
+                        }
+                    });
                 });
 
                 cards.forEach(card => {
@@ -880,12 +1143,13 @@ else
                     });
 
                     card.addEventListener("click", e => {
-                      if (e.target.closest(".quick-status")) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return;
-                      }
-                      if (wasDragging) e.preventDefault();
+                        if (e.target.closest(".add-tags-btn, .remove-tags-btn, .add-tag-form") ||
+                            (e.target.closest(".task-tag") && isRemovalModeFor(e.target.closest(".task-tag").dataset.taskId))) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
+                        if (wasDragging) e.preventDefault();
                     });
                 });
 

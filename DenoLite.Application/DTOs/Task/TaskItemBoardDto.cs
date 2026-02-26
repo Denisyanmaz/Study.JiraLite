@@ -21,5 +21,7 @@ namespace DenoLite.Application.DTOs.Task
         public string? AssigneeEmail { get; set; }
         public Guid ProjectId { get; set; }
         public DateTime? DueDate { get; set; }
+        /// <summary>User-defined tags for this task.</summary>
+        public List<TaskTagDto> Tags { get; set; } = new();
     }
 }

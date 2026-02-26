@@ -292,6 +292,20 @@ namespace DenoLite.Infrastructure.Services
                 })
                 .ToListAsync();
 
+            var taskIds = items.Select(x => x.Id).ToList();
+            if (taskIds.Count > 0)
+            {
+                var tags = await _context.TaskTags
+                    .Where(tt => taskIds.Contains(tt.TaskId))
+                    .ToListAsync();
+                var tagsByTask = tags.GroupBy(t => t.TaskId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var item in items)
+                {
+                    if (tagsByTask.TryGetValue(item.Id, out var taskTags))
+                        item.Tags = taskTags.Select(tt => new TaskTagDto { Id = tt.Id, Label = tt.Label, Color = tt.Color }).ToList();
+                }
+            }
+
             return new PagedResult<TaskItemBoardDto>(items, query.Page, query.PageSize, total);
         }
         public async Task<TaskItem> UpdateTaskStatusAsync(Guid taskId, DenoTaskStatus status, Guid currentUserId)
@@ -327,6 +341,68 @@ namespace DenoLite.Infrastructure.Services
             return task;
         }
 
+        public async Task<TaskTagDto> AddTaskTagAsync(Guid taskId, AddTaskTagDto dto, Guid currentUserId)
+        {
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null) throw new NotFoundException("Task not found");
+
+            var project = await _context.Projects.FindAsync(task.ProjectId);
+            if (project == null) throw new NotFoundException("Project not found");
+
+            if (task.AssigneeId != currentUserId && project.OwnerId != currentUserId)
+                throw new ForbiddenException("Only the assignee or project owner can add tags to this task.");
+
+            var label = (dto.Label ?? "").Trim();
+            if (string.IsNullOrEmpty(label))
+                throw new BadRequestException("Tag label is required.");
+            if (label.Length > 20)
+                label = label.Substring(0, 20);
+
+            var tag = new TaskTag
+            {
+                TaskId = taskId,
+                Label = label,
+                Color = string.IsNullOrWhiteSpace(dto.Color) ? "#6c757d" : dto.Color.Trim()
+            };
+            _context.TaskTags.Add(tag);
+            await _context.SaveChangesAsync();
+
+            await _activity.LogAsync(
+                task.ProjectId,
+                task.Id,
+                currentUserId,
+                "TaskTagAdded",
+                $"Tag added: \"{label}\""
+            );
+
+            return new TaskTagDto { Id = tag.Id, Label = tag.Label, Color = tag.Color };
+        }
+
+        public async Task RemoveTaskTagAsync(Guid taskId, Guid tagId, Guid currentUserId)
+        {
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null) throw new NotFoundException("Task not found");
+
+            var project = await _context.Projects.FindAsync(task.ProjectId);
+            if (project == null) throw new NotFoundException("Project not found");
+
+            if (task.AssigneeId != currentUserId && project.OwnerId != currentUserId)
+                throw new ForbiddenException("Only the assignee or project owner can remove tags from this task.");
+
+            var tag = await _context.TaskTags.FirstOrDefaultAsync(tt => tt.Id == tagId && tt.TaskId == taskId);
+            if (tag == null) throw new NotFoundException("Tag not found");
+
+            _context.TaskTags.Remove(tag);
+            await _context.SaveChangesAsync();
+
+            await _activity.LogAsync(
+                task.ProjectId,
+                task.Id,
+                currentUserId,
+                "TaskTagRemoved",
+                $"Tag removed: \"{tag.Label}\""
+            );
+        }
 
         private async Task<string> GetUserEmailAsync(Guid userId)
         {

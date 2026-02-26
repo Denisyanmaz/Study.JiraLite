@@ -27,6 +27,7 @@ namespace DenoLite.Infrastructure.Persistence
         public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
         public DbSet<EmailChangeRequest> EmailChangeRequests => Set<EmailChangeRequest>();
         public DbSet<PasswordReset> PasswordResets => Set<PasswordReset>();
+        public DbSet<TaskTag> TaskTags => Set<TaskTag>();
 
 
         public override int SaveChanges()
@@ -287,6 +288,30 @@ namespace DenoLite.Infrastructure.Persistence
                 entity.HasIndex(a => new { a.ProjectId, a.CreatedAt });
                 entity.HasIndex(a => new { a.TaskId, a.CreatedAt });
                 entity.HasIndex(a => a.ActorId);
+            });
+
+            // ----------------------------
+            // Task Tags
+            // ----------------------------
+            modelBuilder.Entity<TaskTag>(entity =>
+            {
+                entity.Property(tt => tt.Label)
+                      .IsRequired()
+                      .HasMaxLength(20);
+
+                entity.Property(tt => tt.Color)
+                      .IsRequired()
+                      .HasMaxLength(30);
+
+                entity.Property(tt => tt.TaskId)
+                      .IsRequired();
+
+                entity.HasOne<TaskItem>()
+                      .WithMany()
+                      .HasForeignKey(tt => tt.TaskId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(tt => tt.TaskId);
             });
         }
 
