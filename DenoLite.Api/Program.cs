@@ -94,7 +94,8 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 // 🔹 Dependency Injection
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
-builder.Services.AddScoped<ITaskService, TaskService>();
+            builder.Services.AddScoped<IBoardColumnService, BoardColumnService>();
+            builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IActivityService, ActivityService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
 

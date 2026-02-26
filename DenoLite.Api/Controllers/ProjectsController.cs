@@ -1,6 +1,7 @@
 using DenoLite.Application.DTOs.Common;
 using DenoLite.Application.DTOs.Project;
 using DenoLite.Application.DTOs.ProjectMember;
+using DenoLite.Application.DTOs.BoardColumn;
 using DenoLite.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,12 @@ namespace DenoLite.Api.Controllers
     public class ProjectsController : ControllerBase
     {
         private readonly IProjectService _projectService;
+        private readonly IBoardColumnService _boardColumnService;
 
-        public ProjectsController(IProjectService projectService)
+        public ProjectsController(IProjectService projectService, IBoardColumnService boardColumnService)
         {
             _projectService = projectService;
+            _boardColumnService = boardColumnService;
         }
 
         // -----------------------------
@@ -80,6 +83,38 @@ namespace DenoLite.Api.Controllers
 
             await _projectService.RemoveMemberAsync(projectId, memberUserId, currentUserId);
 
+            return NoContent();
+        }
+
+        // -----------------------------
+        // Board columns (customizable Kanban)
+        // -----------------------------
+
+        [HttpGet("{projectId:guid}/board-columns")]
+        public async Task<IActionResult> GetBoardColumns(Guid projectId)
+        {
+            var columns = await _boardColumnService.GetByProjectIdAsync(projectId, GetCurrentUserId());
+            return Ok(columns);
+        }
+
+        [HttpPost("{projectId:guid}/board-columns")]
+        public async Task<IActionResult> CreateBoardColumn(Guid projectId, [FromBody] CreateBoardColumnDto dto)
+        {
+            var column = await _boardColumnService.CreateAsync(projectId, dto, GetCurrentUserId());
+            return CreatedAtAction(nameof(GetBoardColumns), new { projectId }, column);
+        }
+
+        [HttpPatch("board-columns/{columnId:guid}")]
+        public async Task<IActionResult> UpdateBoardColumn(Guid columnId, [FromBody] UpdateBoardColumnDto dto)
+        {
+            var column = await _boardColumnService.UpdateAsync(columnId, dto, GetCurrentUserId());
+            return Ok(column);
+        }
+
+        [HttpDelete("board-columns/{columnId:guid}")]
+        public async Task<IActionResult> DeleteBoardColumn(Guid columnId)
+        {
+            await _boardColumnService.DeleteAsync(columnId, GetCurrentUserId());
             return NoContent();
         }
 

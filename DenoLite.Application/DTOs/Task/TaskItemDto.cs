@@ -28,5 +28,8 @@ namespace DenoLite.Application.DTOs.Task
 
         [FutureDate]
         public DateTime? DueDate { get; set; }
+
+        /// <summary>Optional. When set, task is placed in this board column and Status is derived from column name.</summary>
+        public Guid? BoardColumnId { get; set; }
     }
 }

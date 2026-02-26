@@ -240,6 +240,39 @@ namespace DenoLite.Infrastructure.Migrations
                     b.ToTable("Projects");
                 });
 
+            modelBuilder.Entity("DenoLite.Domain.Entities.BoardColumn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("BoardColumns");
+                });
+
             modelBuilder.Entity("DenoLite.Domain.Entities.ProjectMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -325,6 +358,9 @@ namespace DenoLite.Infrastructure.Migrations
                     b.Property<Guid>("AssigneeId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BoardColumnId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -367,6 +403,8 @@ namespace DenoLite.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BoardColumnId");
 
                     b.HasIndex("DueDate");
 
@@ -536,6 +574,11 @@ namespace DenoLite.Infrastructure.Migrations
 
             modelBuilder.Entity("DenoLite.Domain.Entities.TaskItem", b =>
                 {
+                    b.HasOne("DenoLite.Domain.Entities.BoardColumn", null)
+                        .WithMany()
+                        .HasForeignKey("BoardColumnId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("DenoLite.Domain.Entities.Project", null)
                         .WithMany("Tasks")
                         .HasForeignKey("ProjectId")
@@ -552,8 +595,21 @@ namespace DenoLite.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DenoLite.Domain.Entities.BoardColumn", b =>
+                {
+                    b.HasOne("DenoLite.Domain.Entities.Project", "Project")
+                        .WithMany("BoardColumns")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("DenoLite.Domain.Entities.Project", b =>
                 {
+                    b.Navigation("BoardColumns");
+
                     b.Navigation("Members");
 
                     b.Navigation("Tasks");

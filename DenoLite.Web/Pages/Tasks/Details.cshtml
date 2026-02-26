@@ -1,6 +1,11 @@
 @page "{id:guid}"
 @model DenoLite.Web.Pages.Tasks.DetailsModel
 @using DenoLite.Domain.Enums
+@{
+    var saveFullUpdateUrl = "?handler=SaveFullUpdate&id=" + Model.Id + "&tab=overview";
+    var updateStatusUrl = "?handler=UpdateStatus&id=" + Model.Id + "&tab=overview";
+    var deleteTaskUrl = "?handler=DeleteTask&id=" + Model.Id;
+}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
@@ -14,7 +19,7 @@
     <div class="d-flex gap-2">
         @if (Model.Task != null)
         {
-            <button class="btn btn-danger" onclick="deleteTask()">Delete Task</button>
+            <button class="btn btn-danger" onclick="deleteTask()" data-delete-url="@("?handler=DeleteTask&id=" + Model.Id)">Delete Task</button>
             <a class="btn btn-outline-secondary" href="/Projects/Details/@Model.Task.ProjectId">Back to Project</a>
         }
     </div>
@@ -29,11 +34,12 @@
 <div id="toast" class="alert d-none mb-3" role="alert"></div>
 
 <script>
-    // Base serverTask object used across Overview + Delete scripts
+    // Base serverTask object used across Overview + Delete scripts (description here so Quill init in Scripts section always has it)
     const serverTask = {
         id: "@Model.Id",
         projectId: "@Model.Task?.ProjectId",
-        title: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Task?.Title ?? ""))
+        title: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Task?.Title ?? "")),
+        description: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Task?.Description ?? ""))
     };
 
     // Members of this task's project for mention suggestions (handle = email local-part)
@@ -72,6 +78,7 @@
     @* ---------------- Overview ---------------- *@
     @if (Model.Tab == "overview")
     {
+        <div id="taskDetailsUrls" data-save-full-update="@saveFullUpdateUrl" data-update-status="@updateStatusUrl" data-delete-task="@deleteTaskUrl" data-board-column-id="@(Model.Task?.BoardColumnId ?? Model.BoardColumns.FirstOrDefault()?.Id)" style="display:none" aria-hidden="true"></div>
         <div class="card">
             <div class="card-body">
 
@@ -96,19 +103,32 @@
                         <div id="taskDetailsDescriptionFallback" class="form-control border rounded" contenteditable="true" style="min-height: 120px; max-height: 200px; overflow-y: auto;" data-placeholder="Describe the task…"></div>
                     </div>
                 </div>
-                        <div class="form-text">Auto-saves on change</div>
-
-                <hr />
 
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="text-muted small mb-1">Status</label>
-                        <select id="status" class="form-select">
-                            @foreach (var s in Enum.GetValues<DenoTaskStatus>())
-                            {
-                                <option value="@s" selected="@(Model.Task?.Status == s)">@s</option>
-                            }
-                        </select>
+                        @if (Model.BoardColumns.Any())
+                        {
+                            <select id="boardColumnId" class="form-select">
+                                @{
+                                    var firstColId = Model.BoardColumns.FirstOrDefault()?.Id;
+                                    var currentColId = Model.Task?.BoardColumnId ?? firstColId;
+                                }
+                                @foreach (var col in Model.BoardColumns)
+                                {
+                                    <option value="@col.Id" selected="@(currentColId == col.Id)">@col.Name</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <select id="status" class="form-select">
+                                @foreach (var s in Enum.GetValues<DenoTaskStatus>())
+                                {
+                                    <option value="@s" selected="@(Model.Task?.Status == s)">@s</option>
+                                }
+                            </select>
+                        }
                     </div>
 
                     <div class="col-md-4">
@@ -138,7 +158,6 @@
                         <label class="text-muted small mb-1">Due Date</label>
                         <input id="dueDate" type="date" class="form-control"
                                value="@(Model.Task?.DueDate?.ToString("yyyy-MM-dd") ?? "")" />
-                        <div class="form-text">Sends yyyy-MM-dd (safe for Postgres)</div>
                     </div>
                 </div>
 
@@ -162,8 +181,6 @@
                     </div>
                 </div>
 
-                <hr />
-
                 <div class="small text-muted">
                     ProjectId: <code>@Model.Task?.ProjectId</code>
                 </div>
@@ -174,14 +191,20 @@
             // Extend serverTask with full details for overview tab
             serverTask.description = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Task?.Description ?? ""));
             serverTask.status = "@Model.Task?.Status";
+            (function(){ var e = document.getElementById('taskDetailsUrls'); serverTask.boardColumnId = (e && e.getAttribute('data-board-column-id')) || null; })();
             serverTask.priority = "@(Model.Task?.Priority ?? 3)";
             serverTask.assigneeId = "@Model.Task?.AssigneeId";
             serverTask.dueDate = "@(Model.Task?.DueDate?.ToString("yyyy-MM-dd") ?? "")";
 
             function setSaving(isSaving) {
               const btn = document.getElementById("btnSaveAll");
-              if (btn) btn.disabled = isSaving;
+              if (btn) {
+                btn.disabled = isSaving;
+                btn.textContent = isSaving ? "Saving..." : "Save changes";
+              }
             }
+
+            var saveInProgress = false;
 
             function resetToServerValues() {
                 document.getElementById("title").value = serverTask.title;
@@ -190,7 +213,12 @@
                 }
                 var fallbackEd = document.getElementById("taskDetailsDescriptionFallback");
                 if (fallbackEd) fallbackEd.innerHTML = serverTask.description || "";
-                document.getElementById("status").value = serverTask.status;
+                var statusEl = document.getElementById("status");
+                if (statusEl) statusEl.value = serverTask.status;
+                var boardColEl = document.getElementById("boardColumnId");
+                if (boardColEl) {
+                    boardColEl.value = serverTask.boardColumnId != null ? serverTask.boardColumnId : (boardColEl.options.length > 0 ? boardColEl.options[0].value : "");
+                }
                 document.getElementById("priority").value = serverTask.priority;
                 document.getElementById("assigneeId").value = serverTask.assigneeId;
                 document.getElementById("dueDate").value = serverTask.dueDate;
@@ -200,18 +228,25 @@
                 const dueDateStr = document.getElementById("dueDate").value;
                 var descEl = document.getElementById("taskDetailsDescriptionFallback");
                 const description = window.taskDetailsQuill ? window.taskDetailsQuill.root.innerHTML : (descEl ? descEl.innerHTML : "");
+                const boardColEl = document.getElementById("boardColumnId");
+                // When using board columns, always send BoardColumnId so status is persisted (backend syncs Status from column name)
+                const boardColumnId = boardColEl ? (boardColEl.value || (boardColEl.options.length > 0 ? boardColEl.options[0].value : null)) : null;
 
-                return {
+                const payload = {
                     Title: document.getElementById("title").value,
                     Description: description,
-                    Status: document.getElementById("status").value,
+                    Status: document.getElementById("status") ? document.getElementById("status").value : serverTask.status,
                     Priority: parseInt(document.getElementById("priority").value, 10),
                     AssigneeId: document.getElementById("assigneeId").value,
                     ProjectId: serverTask.projectId,
                     DueDate: dueDateStr ? dueDateStr : null
                 };
+                if (boardColumnId) payload.BoardColumnId = boardColumnId;
+                return payload;
             }
             async function saveFullUpdate() {
+              if (saveInProgress) return;
+              saveInProgress = true;
               try {
                 setSaving(true);
 
@@ -223,12 +258,28 @@
                   return;
                 }
 
-                const res = await fetch(`?handler=SaveFullUpdate&id=${serverTask.id}&tab=overview`, {
+                var urlsEl = document.getElementById('taskDetailsUrls');
+                var saveUrl = (urlsEl && urlsEl.getAttribute('data-save-full-update')) || '';
+                if (!saveUrl) {
+                  showToast("Save URL not found. Please refresh the page.", false);
+                  return;
+                }
+                var abortController = new AbortController();
+                var timeoutId = setTimeout(function() {
+                  abortController.abort();
+                }, 30000);
+                var res;
+                try {
+                res = await fetch(saveUrl, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   credentials: "include",
-                  body: JSON.stringify(payload)
+                  body: JSON.stringify(payload),
+                  signal: abortController.signal
                 });
+                } finally {
+                  clearTimeout(timeoutId);
+                }
 
                 if (!res.ok) {
                   const txt = await res.text();
@@ -236,40 +287,52 @@
                   return;
                 }
 
-                const data = await res.json();
-
-
-            async function saveStatus() {
+                let data;
                 try {
-                    const newStatus = document.getElementById("status").value;
-
-                const res = await fetch(`?handler=UpdateStatus&id=${serverTask.id}&tab=overview`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  credentials: "include",
-                  body: JSON.stringify({ Status: newStatus })
-                });
-                    if (!res.ok) {
-                        const txt = await res.text();
-                        showToast(`Status update failed: ${res.status} ${txt}`, false);
-                        return;
-                    }
-
-                    showToast("Status updated.");
-                } catch (e) {
-                    showToast(`Status error: ${e}`, false);
+                  data = await res.json();
+                } catch (parseErr) {
+                  showToast("Save failed: invalid response from server.", false);
+                  return;
                 }
-            }
-                if (data?.redirectUrl) {
-                  window.location.href = data.redirectUrl;
+
+                var redirectUrl = (data && (data.redirectUrl || data.RedirectUrl)) || null;
+                if (redirectUrl) {
+                  window.location.replace(redirectUrl);
                   return;
                 }
 
                 showToast("Saved.");
               } catch (e) {
-                showToast(`Save error: ${e}`, false);
+                if (e.name === 'AbortError') {
+                  showToast("Save timed out. Please try again.", false);
+                } else {
+                  showToast("Save error: " + (e.message || e), false);
+                }
               } finally {
+                saveInProgress = false;
                 setSaving(false);
+              }
+            }
+
+            async function saveStatus() {
+              try {
+                const newStatus = document.getElementById("status").value;
+                var urlsEl = document.getElementById('taskDetailsUrls');
+                var statusUrl = (urlsEl && urlsEl.getAttribute('data-update-status')) || '';
+                const res = await fetch(statusUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({ Status: newStatus })
+                });
+                if (!res.ok) {
+                  const txt = await res.text();
+                  showToast(`Status update failed: ${res.status} ${txt}`, false);
+                  return;
+                }
+                showToast("Status updated.");
+              } catch (e) {
+                showToast(`Status error: ${e}`, false);
               }
             }
         </script>
@@ -379,7 +442,9 @@
         }
 
         try {
-            const res = await fetch(`?handler=DeleteTask&id=${serverTask.id}`, {
+            var deleteBtn = document.querySelector('[data-delete-url]');
+            var deleteUrl = (deleteBtn && deleteBtn.getAttribute('data-delete-url')) || '';
+            const res = await fetch(deleteUrl, {
                 method: "POST",
                 credentials: "include"
             });

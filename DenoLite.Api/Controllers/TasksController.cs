@@ -68,6 +68,13 @@ namespace DenoLite.Api.Controllers
             return Ok(task);
         }
 
+        [HttpPatch("{id}/board-column")]
+        public async Task<IActionResult> UpdateBoardColumn(Guid id, [FromBody] UpdateTaskBoardColumnDto dto)
+        {
+            var task = await _taskService.UpdateTaskBoardColumnAsync(id, dto.BoardColumnId, GetCurrentUserId());
+            return Ok(task);
+        }
+
         [HttpPost("{id}/tags")]
         public async Task<IActionResult> AddTag(Guid id, [FromBody] AddTaskTagDto dto)
         {

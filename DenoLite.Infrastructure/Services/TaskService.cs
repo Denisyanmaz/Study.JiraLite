@@ -51,6 +51,30 @@ namespace DenoLite.Infrastructure.Services
                 DueDate = AsUtc(dto.DueDate)
             };
 
+            // Board column and Status in sync with column name
+            BoardColumn? column = null;
+            if (dto.BoardColumnId.HasValue && dto.BoardColumnId.Value != Guid.Empty)
+            {
+                column = await _context.BoardColumns
+                    .FirstOrDefaultAsync(bc => bc.Id == dto.BoardColumnId.Value && bc.ProjectId == dto.ProjectId);
+                if (column != null)
+                {
+                    task.BoardColumnId = column.Id;
+                    task.Status = MapColumnNameToStatus(column.Name);
+                }
+            }
+            if (task.BoardColumnId == null)
+            {
+                column = await _context.BoardColumns
+                    .Where(bc => bc.ProjectId == dto.ProjectId)
+                    .OrderBy(bc => bc.SortOrder)
+                    .FirstOrDefaultAsync();
+                if (column != null)
+                {
+                    task.BoardColumnId = column.Id;
+                    task.Status = MapColumnNameToStatus(column.Name);
+                }
+            }
 
             _context.Tasks.Add(task);
             await _context.SaveChangesAsync();
@@ -135,10 +159,19 @@ namespace DenoLite.Infrastructure.Services
             // ✅ snapshot (before)
             var beforeTitle = task.Title;
             var beforeStatus = task.Status;
+            var beforeBoardColumnId = task.BoardColumnId;
             var beforePriority = task.Priority;
             var beforeDescription = task.Description;
             var beforeAssignee = task.AssigneeId;
             var beforeDue = task.DueDate;
+
+            // Load before column name for activity message (so we show "Testing" not "InProgress")
+            string? beforeColumnName = null;
+            if (beforeBoardColumnId.HasValue)
+            {
+                var beforeCol = await _context.BoardColumns.FindAsync(beforeBoardColumnId.Value);
+                beforeColumnName = beforeCol?.Name;
+            }
 
             // apply updates
             task.Title = dto.Title;
@@ -148,9 +181,23 @@ namespace DenoLite.Infrastructure.Services
             task.AssigneeId = dto.AssigneeId;
             task.DueDate = AsUtc(dto.DueDate);
 
+            // Board column: when provided, validate and sync Status from column name
+            string? afterColumnName = null;
+            if (dto.BoardColumnId.HasValue && dto.BoardColumnId.Value != Guid.Empty)
+            {
+                var column = await _context.BoardColumns
+                    .FirstOrDefaultAsync(bc => bc.Id == dto.BoardColumnId.Value && bc.ProjectId == task.ProjectId);
+                if (column != null)
+                {
+                    task.BoardColumnId = column.Id;
+                    task.Status = MapColumnNameToStatus(column.Name);
+                    afterColumnName = column.Name;
+                }
+            }
+
             await _context.SaveChangesAsync();
 
-            // ✅ build rich diff message
+            // ✅ build rich diff message (use column names when available so "Todo → Testing" not "Todo → InProgress")
             static string P(int p) => $"P{p}";
             static string Due(DateTime? d) => d.HasValue ? d.Value.ToString("dd.MM.yyyy") : "None";
 
@@ -159,8 +206,12 @@ namespace DenoLite.Infrastructure.Services
             if (beforeTitle != task.Title)
                 changes.Add($"Title '{beforeTitle}' → '{task.Title}'");
 
-            if (beforeStatus != task.Status)
-                changes.Add($"Status {beforeStatus} → {task.Status}");
+            if (beforeStatus != task.Status || beforeBoardColumnId != task.BoardColumnId)
+            {
+                var fromLabel = afterColumnName != null ? (beforeColumnName ?? beforeStatus.ToString()) : beforeStatus.ToString();
+                var toLabel = afterColumnName ?? task.Status.ToString();
+                changes.Add($"Status {fromLabel} → {toLabel}");
+            }
 
             if (beforePriority != task.Priority)
                 changes.Add($"Priority {P(beforePriority)} → {P(task.Priority)}");
@@ -253,6 +304,9 @@ namespace DenoLite.Infrastructure.Services
             if (query.Status.HasValue)
                 tasks = tasks.Where(t => t.Status == query.Status.Value);
 
+            if (query.BoardColumnId.HasValue)
+                tasks = tasks.Where(t => t.BoardColumnId == query.BoardColumnId.Value);
+
             if (query.Priority.HasValue)
                 tasks = tasks.Where(t => t.Priority == query.Priority.Value);
 
@@ -288,7 +342,8 @@ namespace DenoLite.Infrastructure.Services
                     AssigneeId = x.t.AssigneeId,
                     AssigneeEmail = x.u.Email,
                     ProjectId = x.t.ProjectId,
-                    DueDate = x.t.DueDate
+                    DueDate = x.t.DueDate,
+                    BoardColumnId = x.t.BoardColumnId
                 })
                 .ToListAsync();
 
@@ -308,6 +363,53 @@ namespace DenoLite.Infrastructure.Services
 
             return new PagedResult<TaskItemBoardDto>(items, query.Page, query.PageSize, total);
         }
+
+        public async Task<TaskItem> UpdateTaskBoardColumnAsync(Guid taskId, Guid boardColumnId, Guid currentUserId)
+        {
+            var task = await _context.Tasks.FindAsync(taskId);
+            if (task == null) throw new NotFoundException("Task not found");
+
+            var isMember = await _context.ProjectMembers
+                .AnyAsync(pm => pm.ProjectId == task.ProjectId && pm.UserId == currentUserId);
+            if (!isMember)
+                throw new ForbiddenException("You are not a member of this project.");
+
+            var column = await _context.BoardColumns
+                .FirstOrDefaultAsync(bc => bc.Id == boardColumnId && bc.ProjectId == task.ProjectId);
+            if (column == null)
+                throw new BadRequestException("Board column not found or does not belong to this project.");
+
+            // For activity message: show column names (e.g. "Todo → Testing") not enum (Todo → InProgress)
+            string? beforeColumnName = null;
+            if (task.BoardColumnId.HasValue)
+            {
+                var beforeCol = await _context.BoardColumns.FindAsync(task.BoardColumnId.Value);
+                beforeColumnName = beforeCol?.Name;
+            }
+            var fromLabel = beforeColumnName ?? task.Status.ToString();
+            var toLabel = column.Name;
+
+            task.BoardColumnId = boardColumnId;
+            task.Status = MapColumnNameToStatus(column.Name);
+            await _context.SaveChangesAsync();
+
+            var message = $"Task updated: '{task.Title}': Status {fromLabel} → {toLabel}";
+            await _activity.LogAsync(task.ProjectId, task.Id, currentUserId, "TaskUpdated", message);
+
+            return task;
+        }
+
+        /// <summary>Maps board column name to legacy Status enum so filters and display stay in sync.</summary>
+        private static DenoTaskStatus MapColumnNameToStatus(string columnName)
+        {
+            if (string.IsNullOrWhiteSpace(columnName)) return DenoTaskStatus.Todo;
+            var name = columnName.Trim();
+            if (name.Equals("Todo", StringComparison.OrdinalIgnoreCase)) return DenoTaskStatus.Todo;
+            if (name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) return DenoTaskStatus.InProgress;
+            if (name.Equals("Done", StringComparison.OrdinalIgnoreCase)) return DenoTaskStatus.Done;
+            return DenoTaskStatus.InProgress; // custom columns (e.g. "Testing") map to InProgress
+        }
+
         public async Task<TaskItem> UpdateTaskStatusAsync(Guid taskId, DenoTaskStatus status, Guid currentUserId)
         {
             var task = await _context.Tasks.FindAsync(taskId);

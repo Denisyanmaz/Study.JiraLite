@@ -64,6 +64,19 @@ namespace DenoLite.Infrastructure.Services
                 Role = "Owner"
             });
 
+            // Default board columns (Todo, In Progress, Done)
+            var defaultNames = new[] { "Todo", "In Progress", "Done" };
+            for (var i = 0; i < defaultNames.Length; i++)
+            {
+                _db.BoardColumns.Add(new BoardColumn
+                {
+                    ProjectId = project.Id,
+                    Name = defaultNames[i],
+                    SortOrder = i,
+                    CreatedBy = userId
+                });
+            }
+
             await _db.SaveChangesAsync();
 
             return new ProjectDto
@@ -134,6 +147,11 @@ namespace DenoLite.Infrastructure.Services
                 TaskItem? welcomeTask = null;
                 if (!alreadyHasTaskInProject)
                 {
+                    var firstColumnId = await _db.BoardColumns
+                        .Where(bc => bc.ProjectId == projectId)
+                        .OrderBy(bc => bc.SortOrder)
+                        .Select(bc => bc.Id)
+                        .FirstOrDefaultAsync();
                     var taskTitle = string.IsNullOrEmpty(email) ? "New member" : (email.IndexOf('@') > 0 ? email[..email.IndexOf('@')] : email);
                     welcomeTask = new TaskItem
                     {
@@ -144,7 +162,8 @@ namespace DenoLite.Infrastructure.Services
                         AssigneeId = dto.UserId,
                         ProjectId = projectId,
                         DueDate = DateTime.UtcNow.AddDays(3),
-                        CreatedBy = currentUserId
+                        CreatedBy = currentUserId,
+                        BoardColumnId = firstColumnId != Guid.Empty ? firstColumnId : null
                     };
                     _db.Tasks.Add(welcomeTask);
                 }

@@ -3,6 +3,7 @@ using DenoLite.Application.DTOs.Comment;
 using DenoLite.Application.DTOs.Common;
 using DenoLite.Application.DTOs.ProjectMember;
 using DenoLite.Application.DTOs.Task;
+using DenoLite.Application.DTOs.BoardColumn;
 using DenoLite.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -50,6 +51,9 @@ namespace DenoLite.Web.Pages.Tasks
 
         public List<TaskCommentDto> Comments { get; private set; } = new();
         public PagedResult<ActivityLogDto>? Activity { get; private set; }
+
+        /// <summary>Board columns for the task's project. Used on overview to show Column dropdown.</summary>
+        public List<BoardColumnDto> BoardColumns { get; private set; } = new();
 
         // -------------------- Add Comment --------------------
         [BindProperty]
@@ -264,6 +268,7 @@ namespace DenoLite.Web.Pages.Tasks
 
                 // ✅ important: only after Task is loaded
                 await LoadAssigneesAsync(client, Task.ProjectId);
+                await LoadBoardColumnsAsync(client, Task.ProjectId);
             }
 
             // 2) Comments (only on comments tab)
@@ -412,6 +417,24 @@ namespace DenoLite.Web.Pages.Tasks
             {
                 // optional debug
                 AssigneesError = ex.Message;
+            }
+        }
+
+        private async Task LoadBoardColumnsAsync(HttpClient client, Guid projectId)
+        {
+            BoardColumns = new List<BoardColumnDto>();
+            try
+            {
+                var resp = await client.GetAsync($"/api/projects/{projectId}/board-columns");
+                if (resp.IsSuccessStatusCode)
+                {
+                    var list = await resp.Content.ReadFromJsonAsync<List<BoardColumnDto>>();
+                    BoardColumns = list ?? new List<BoardColumnDto>();
+                }
+            }
+            catch
+            {
+                // ignore
             }
         }
 
